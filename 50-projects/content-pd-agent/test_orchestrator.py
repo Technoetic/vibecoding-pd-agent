@@ -421,6 +421,90 @@ def test_parse_json_robust():
     print("PASS test_parse_json_robust")
 
 
+def test_parse_json_always_dict():
+    """parse_json은 LLM이 배열·null·문자열 최상위를 줘도 항상 dict 반환(핸드오프 무결성).
+    견고성 감사: LLM이 [{...}] 또는 null을 주면 후속 .get/.update가 깨지던 결함 방지."""
+    assert orc.parse_json('[{"a":1}]') == {}, "배열 최상위 → 빈 dict"
+    assert orc.parse_json('null') == {}, "null → 빈 dict"
+    assert orc.parse_json('"문자열"') == {}, "문자열 최상위 → 빈 dict"
+    assert orc.parse_json('42') == {}, "숫자 → 빈 dict"
+    assert orc.parse_json('{"a":1}') == {"a": 1}, "정상 dict는 보존"
+    print("PASS test_parse_json_always_dict")
+
+
+def test_as_list_normalizes():
+    """_as_list: LLM이 list 기대 필드에 str/null/dict 줘도 안전 정규화.
+    견고성 감사: keywords='AI'(str) → 문자 단위 순회로 메트릭 오염되던 결함 방지."""
+    assert orc._as_list(["a", "b"]) == ["a", "b"], "list는 그대로"
+    assert orc._as_list("AI 트렌드") == ["AI 트렌드"], "str → 1원소 리스트(문자순회 방지)"
+    assert orc._as_list(None) == [], "null → 빈 리스트"
+    assert orc._as_list("") == [], "빈 문자열 → 빈 리스트"
+    assert orc._as_list({"k": "v"}) == [{"k": "v"}], "dict → 1원소 리스트"
+    print("PASS test_as_list_normalizes")
+
+
+def test_as_str_normalizes():
+    """_as_str: LLM이 str 기대 필드에 list/null/dict 줘도 안전 정규화."""
+    assert orc._as_str("hi") == "hi", "str은 그대로"
+    assert orc._as_str(None) == "", "null → 빈 문자열"
+    assert orc._as_str(["a", "b"]) == "a\nb", "list → 줄바꿈 결합"
+    assert orc._as_str(42) == "42", "숫자 → 문자열"
+    print("PASS test_as_str_normalizes")
+
+
+def test_keyword_inclusion_string_input_safe():
+    """keyword_inclusion_score에 str 키워드(LLM 오타입)가 _as_list 거치면 정상 동작.
+    회귀: keywords='AI'를 직접 넘기면 문자 단위 순회(오염), _as_list로 보호되는지 계약 검증."""
+    # _as_list를 거친 정상 입력
+    r = orc.keyword_inclusion_score("AI로 코딩하는 방법", orc._as_list("AI"))
+    assert r["total"] == 1, r  # 'AI' 1개 키워드(문자 2개 아님)
+    print("PASS test_keyword_inclusion_string_input_safe")
+
+
+def test_read_state_graceful(tmp_path=None):
+    """read_state: State.json 부재·손상 시 기본 상태로 graceful 복구(컨테이너 재시작 방어)."""
+    import tempfile, pathlib
+    saved = orc.STATE_PATH
+    try:
+        # 부재
+        orc.STATE_PATH = pathlib.Path(tempfile.mkdtemp()) / "없는파일.json"
+        s = orc.read_state()
+        assert s == {"max_retries": 3, "tasks": []}, s
+        # 손상
+        bad = pathlib.Path(tempfile.mkdtemp()) / "State.json"
+        bad.write_text("{깨진 json", encoding="utf-8")
+        orc.STATE_PATH = bad
+        s2 = orc.read_state()
+        assert s2 == {"max_retries": 3, "tasks": []}, s2
+    finally:
+        orc.STATE_PATH = saved
+    print("PASS test_read_state_graceful")
+
+
+def test_call_empty_choices_raises_clean(monkeypatch=None):
+    """call/call_text: API가 {'error':...}(choices 없음) 줘도 KeyError 대신 명확한 RuntimeError."""
+    import urllib.request
+    reset()
+    def fake(req, timeout=60):
+        return FakeResp(json.dumps({"error": "rate limit", "usage": {}}).encode("utf-8"))
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake
+    try:
+        try:
+            orc.call("sys", "user")
+            assert False, "choices 부재 시 RuntimeError 기대"
+        except RuntimeError as e:
+            assert "choices" in str(e), e
+        try:
+            orc.call_text("user")
+            assert False, "call_text choices 부재 시 RuntimeError 기대"
+        except RuntimeError as e:
+            assert "choices" in str(e), e
+    finally:
+        urllib.request.urlopen = orig
+    print("PASS test_call_empty_choices_raises_clean")
+
+
 def test_run_has_on_step_param():
     """run에 on_step 파라미터(기본값 None)가 있어 CLI 호환 유지."""
     import inspect
@@ -619,6 +703,12 @@ if __name__ == "__main__":
     test_parse_trends_recovers_broken_json()
     test_parse_trends_normal()
     test_parse_json_robust()
+    test_parse_json_always_dict()
+    test_as_list_normalizes()
+    test_as_str_normalizes()
+    test_keyword_inclusion_string_input_safe()
+    test_read_state_graceful()
+    test_call_empty_choices_raises_clean()
     test_run_has_on_step_param()
     test_emit_swallows_callback_exception()
     test_run_happy_path_integration()

@@ -91,13 +91,17 @@ def call(system: str, user: str, temperature: float = 0.7, max_tokens: int = 120
     token_usage["completion"] += int(usage.get("completion_tokens", 0) or 0)
     token_usage["total"] += int(usage.get("total_tokens", 0) or 0)
     token_usage["calls"] += 1
-    choice = data["choices"][0]
+    choices = data.get("choices") or []      # API가 {"error":...} 줄 때 KeyError/IndexError 방어
+    if not choices:
+        raise RuntimeError(f"BizRouter 비정상 응답(choices 없음): {str(data)[:200]}")
+    choice = choices[0]
     if choice.get("finish_reason") == "length":
         raise RuntimeError(
             f"응답이 max_tokens({max_tokens})에서 잘림 — 토큰 상향 필요. "
             f"completion_tokens={usage.get('completion_tokens')}"
         )
-    return parse_json(choice["message"]["content"])
+    content = (choice.get("message") or {}).get("content") or ""
+    return parse_json(content)
 
 
 def call_text(user: str, model: str = TREND_MODEL, temperature: float = 0.2, max_tokens: int = 1000):
@@ -141,30 +145,39 @@ def call_text(user: str, model: str = TREND_MODEL, temperature: float = 0.2, max
     token_usage["completion"] += int(usage.get("completion_tokens", 0) or 0)
     token_usage["total"] += int(usage.get("total_tokens", 0) or 0)
     token_usage["calls"] += 1
-    if data["choices"][0].get("finish_reason") == "length":
+    choices = data.get("choices") or []      # Sonar 비정상 응답 방어(fetch_live_trends가 상위서 graceful catch)
+    if not choices:
+        raise RuntimeError(f"Sonar 비정상 응답(choices 없음): {str(data)[:200]}")
+    if choices[0].get("finish_reason") == "length":
         raise RuntimeError(
             f"Sonar 응답 잘림(max_tokens={max_tokens}) — 토큰 상향 필요. "
             f"completion_tokens={usage.get('completion_tokens')}"
         )
-    msg = data["choices"][0]["message"]
+    msg = choices[0].get("message") or {}
     meta = msg.get("metadata") or {}
     raw_sources = meta.get("search_results") or []
     sources = [{"title": s.get("title") or s.get("url", ""), "url": s.get("url", "")} for s in raw_sources if s.get("url")]
     return msg.get("content", ""), sources
 
 
+def _coerce_dict(obj) -> dict:
+    """파싱 결과가 dict가 아니면(LLM이 배열·null·문자열 반환) 빈 dict로 강등.
+    핸드오프 무결성 — 후속 .get/.update가 항상 dict 위에서 동작하도록 보장."""
+    return obj if isinstance(obj, dict) else {}
+
+
 def parse_json(text: str) -> dict:
-    """모델 출력에서 첫 JSON 객체를 견고하게 추출.
-    코드펜스(```json), 선행 설명, 후행 여분텍스트('Extra data')를 모두 흡수한다.
-    Sonar/flash-lite가 JSON 뒤에 산문을 덧붙이는 비결정 출력 방어(공개 배포 검증서 발견)."""
-    s = text.strip()
+    """모델 출력에서 첫 JSON 객체를 견고하게 추출(항상 dict 반환).
+    코드펜스(```json), 선행 설명, 후행 여분텍스트('Extra data'), 비-dict 최상위를
+    모두 흡수한다. Sonar/flash-lite의 비결정 출력 방어(공개 배포 검증서 발견)."""
+    s = (text or "").strip()
     # 1) 코드펜스 제거: ```json ... ``` 또는 ``` ... ```
     fence = re.search(r"```(?:json)?\s*(.+?)\s*```", s, re.S)
     if fence:
         s = fence.group(1).strip()
     # 2) 그대로 시도
     try:
-        return json.loads(s)
+        return _coerce_dict(json.loads(s))
     except json.JSONDecodeError:
         pass
     # 3) 첫 '{' 부터 raw_decode — 첫 유효 객체만 취하고 'Extra data' 후행 무시
@@ -172,14 +185,36 @@ def parse_json(text: str) -> dict:
     if start != -1:
         try:
             obj, _ = json.JSONDecoder().raw_decode(s[start:])
-            return obj
+            return _coerce_dict(obj)
         except json.JSONDecodeError:
             pass
     # 4) 최후: greedy 중괄호 매칭
     m = re.search(r"\{.*\}", s, re.S)
     if m:
-        return json.loads(m.group(0))
-    raise json.JSONDecodeError("JSON 객체를 찾지 못함", text, 0)
+        return _coerce_dict(json.loads(m.group(0)))
+    raise json.JSONDecodeError("JSON 객체를 찾지 못함", text or "", 0)
+
+
+def _as_list(v) -> list:
+    """LLM 필드가 list 아니면(string·dict·null) 안전하게 list로 정규화.
+    list 기대 필드(keywords·hooks·storyboard·hashtags·checks)에 string이 와도
+    문자 단위 순회(메트릭 오염)·enumerate 깨짐을 막는다(견고성 감사 발견)."""
+    if isinstance(v, list):
+        return v
+    if v is None or v == "":
+        return []
+    return [v]  # 단일 문자열/객체 → 1원소 리스트
+
+
+def _as_str(v) -> str:
+    """LLM 필드가 str 아니면(list·dict·null) 안전하게 str로 정규화."""
+    if isinstance(v, str):
+        return v
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return "\n".join(str(x) for x in v)
+    return str(v)
 
 
 def load(p: Path) -> str:
@@ -467,8 +502,17 @@ def deterministic_block(orig: dict, channel: dict, density: dict, htag: dict) ->
 
 
 # ── State.json 입출력 ──────────────────────────────────────────────
+_STATE_DEFAULT = {"max_retries": 3, "tasks": []}
+
 def read_state() -> dict:
-    return json.loads(load(STATE_PATH))
+    """State.json 읽기. 부재·손상 시 기본 상태로 graceful 복구(컨테이너 재시작·동시쓰기 방어)."""
+    if not STATE_PATH.exists():
+        return dict(_STATE_DEFAULT)
+    try:
+        s = json.loads(load(STATE_PATH))
+        return s if isinstance(s, dict) else dict(_STATE_DEFAULT)
+    except (json.JSONDecodeError, OSError):
+        return dict(_STATE_DEFAULT)
 
 
 def write_state(state: dict):
@@ -626,7 +670,10 @@ def run(topic: str, on_step=None):
         sys.exit("[!] BIZROUTER_API_KEY 환경변수가 비어있다. export 후 재시도.")
 
     state = read_state()
-    eval_spec = json.loads(load(EVAL_PATH))
+    try:
+        eval_spec = json.loads(load(EVAL_PATH))   # 검수 기준 — 부재/손상 시 명확한 에러(데모 무결성)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"eval_scenarios.json 로드 실패({EVAL_PATH.name}): {e}")
     max_retries = state.get("max_retries", 3)
     kb = knowledge_digest()
     channel_titles = load_channel_titles()  # 카탈로그는 실행 중 불변 — 루프 밖 1회 로드
@@ -654,7 +701,7 @@ def run(topic: str, on_step=None):
     print("[Trend Analyst] 키워드·훅 설계 중…")
     ta = agent_trend_analyst(topic, kb, ch_topics, live["trends"])
     task["content_payload"]["live_trends"] = live  # SSE·기록용
-    keywords, hooks = ta.get("keywords", []), ta.get("hooks", [])
+    keywords, hooks = _as_list(ta.get("keywords")), _as_list(ta.get("hooks"))  # LLM이 str 줘도 list 보장
     task["content_payload"].update(keywords=keywords, hooks=hooks)
     task["status"] = "drafting"
     write_state(state)
@@ -667,6 +714,12 @@ def run(topic: str, on_step=None):
         print(f"[Creator] 스크립트 작성 중… (retry={task['retry_count']})")
         emit("creator", retry=task["retry_count"])
         cre = agent_creator(topic, keywords, hooks, feedback, kb)
+        # LLM 필드 타입 정규화(list 기대 필드에 str/null 와도 메트릭·enumerate 깨짐 방지)
+        cre["storyboard"] = _as_list(cre.get("storyboard"))
+        cre["hashtags"] = _as_list(cre.get("hashtags"))
+        cre["script"] = _as_str(cre.get("script"))
+        cre["title"] = _as_str(cre.get("title"))
+        cre["thumbnail_prompt"] = _as_str(cre.get("thumbnail_prompt"))
         task["content_payload"].update(cre)
         task["status"] = "pending_review"
         write_state(state)
@@ -716,17 +769,20 @@ def run(topic: str, on_step=None):
 
         print("[Reviewer] Eval 검수 중…")
         rev = agent_reviewer(task["content_payload"], eval_spec, orig, channel)
-        verdict = rev.get("verdict", "rejected")
-        for ch in rev.get("checks", []):
+        verdict = _as_str(rev.get("verdict")).strip().lower() or "rejected"  # null·비문자열 → 안전 기본 rejected
+        for ch in _as_list(rev.get("checks")):                              # checks가 list 아니면 빈 순회
+            if not isinstance(ch, dict):
+                continue
             mark = "✅" if ch.get("pass") else "❌"
             print(f"   {mark} {ch.get('metric')}: {ch.get('comment','')}")
             emit("reviewer", metric=ch.get("metric"), passed=ch.get("pass"), comment=ch.get("comment", ""))
 
         # 결정론 강제 차단: originality·channel 위반 사유를 한 번에 모아 반려(retry 낭비 방지)
         block_reasons = deterministic_block(orig, channel, density, htag)
+        rev["feedback"] = _as_list(rev.get("feedback"))  # LLM이 str/null 줘도 list 보장(extend·append 안전)
         if block_reasons and verdict == "approved":
             verdict = "rejected"
-            rev.setdefault("feedback", []).extend(block_reasons)
+            rev["feedback"].extend(block_reasons)
             for r in block_reasons:
                 print(f"   ⛔ 결정론 강제 반려: {r[:50]}")
 
@@ -744,11 +800,11 @@ def run(topic: str, on_step=None):
                   f"(in {token_usage['prompt']}/out {token_usage['completion']}, {token_usage['calls']}콜)")
             emit("done", verdict="approved", title=task["content_payload"].get("title"),
                  payload=task["content_payload"], cost_krw=round(cost_total, 4),
-                 token_usage=dict(token_usage), eval=rev.get("checks", []))
+                 token_usage=dict(token_usage), eval=_as_list(rev.get("checks")))
             return
 
         # rejected
-        feedback = rev.get("feedback", [])
+        feedback = rev["feedback"]  # 위에서 _as_list로 정규화됨
         task["feedback_log"].append({"retry": task["retry_count"], "feedback": feedback})
         task["retry_count"] += 1
         task["status"] = "rejected"
