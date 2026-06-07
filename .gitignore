@@ -1,0 +1,11 @@
+# Python 빌드 산출물
+__pycache__/
+*.pyc
+
+# 로컬 오버라이드 (기기별 민감 설정)
+.claude/settings.local.json
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# 환경변수 (API 키 절대 커밋 금지)
+.env

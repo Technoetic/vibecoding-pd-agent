@@ -1,0 +1,23 @@
+{
+  "collapse-filter": false,
+  "search": "-path:_가이드 -path:90-assets -path:.obsidian",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    { "query": "path:00-meta", "color": { "a": 1, "rgb": 14701138 } },
+    { "query": "path:20-knowledge", "color": { "a": 1, "rgb": 5431378 } },
+    { "query": "path:50-projects", "color": { "a": 1, "rgb": 14328006 } },
+    { "query": "path:30-journal", "color": { "a": 1, "rgb": 11621088 } }
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "collapse-forces": false,
+  "centerStrength": 0.5,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 1
+}

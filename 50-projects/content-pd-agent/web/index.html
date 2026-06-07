@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 콘텐츠 PD 에이전트 — 양실장 바이브코딩대학</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --bd:#30363d; --fg:#e6edf3; --mut:#8b949e; --ok:#3fb950; --no:#f85149; --ac:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:'Pretendard',-apple-system,system-ui,sans-serif; line-height:1.6; }
+  .wrap { max-width:880px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--mut); margin:0 0 24px; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:20px; margin:16px 0; }
+  .inrow { display:flex; gap:8px; }
+  input { flex:1; background:#0d1117; border:1px solid var(--bd); border-radius:8px; color:var(--fg); padding:12px; font-size:15px; }
+  button { background:var(--ac); color:#fff; border:0; border-radius:8px; padding:12px 20px; font-size:15px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .chip { background:#21262d; border:1px solid var(--bd); border-radius:16px; padding:4px 12px; font-size:13px; color:var(--mut); cursor:pointer; }
+  .step { display:flex; align-items:center; gap:10px; padding:6px 0; color:var(--mut); }
+  .step.active { color:var(--fg); } .step.done { color:var(--ok); }
+  .dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--bd); flex:none; }
+  .step.active .dot { border-color:var(--ac); } .step.done .dot { background:var(--ok); border-color:var(--ok); }
+  .trend { font-size:13px; padding:8px 0; border-bottom:1px solid var(--bd); }
+  .trend b { color:var(--ac); } .trend a { color:var(--mut); font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--bd); vertical-align:top; }
+  .pass { color:var(--ok); } .fail { color:var(--no); }
+  .badge { display:inline-block; background:#1f6feb33; color:var(--ac); border:1px solid var(--ac); border-radius:6px; padding:2px 8px; font-size:12px; }
+  .script { white-space:pre-wrap; background:#0d1117; border-radius:8px; padding:14px; font-size:14px; }
+  .muted { color:var(--mut); font-size:13px; }
+  .hidden { display:none; }
+  .arch { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .arch .a { background:#0d1117; border:1px solid var(--bd); border-radius:8px; padding:10px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 AI 콘텐츠 PD 에이전트</h1>
+  <p class="sub">양실장의 바이브코딩대학 · 4-에이전트 오케스트레이션 · 채널 73개 영상 중복검사 + 실시간 트렌드(Sonar)</p>
+
+  <div class="card">
+    <div class="inrow">
+      <input id="topic" placeholder="쇼츠 주제를 입력하세요 (예: AI로 사장님 매출 올리는 법)">
+      <button id="go">기획 생성</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="card hidden" id="progress">
+    <div id="steps"></div>
+  </div>
+
+  <div class="card hidden" id="trendPanel">
+    <b>📈 실시간 트렌드 (Perplexity Sonar)</b>
+    <div id="trends"></div>
+  </div>
+
+  <div class="card hidden" id="result">
+    <h2 id="rTitle"></h2>
+    <p><span class="badge">승인대기</span> <span class="muted" id="rCost"></span></p>
+    <h3>🎬 스크립트</h3><div class="script" id="rScript"></div>
+    <h3>🏷 해시태그</h3><div class="muted" id="rTags"></div>
+  </div>
+
+  <div class="card hidden" id="evalPanel">
+    <b>✅ 검수표 (Eval 8종 + 채널 중복)</b>
+    <table id="evalTable"><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <b>🏗 아키텍처</b>
+    <div class="arch" style="margin-top:10px">
+      <div class="a"><b>Supervisor</b><br>주제 분해·라우팅 (창작 안 함)</div>
+      <div class="a"><b>Trend Analyst</b> · temp 0.8<br>채널주제+Sonar 트렌드→키워드·3초훅</div>
+      <div class="a"><b>Creator</b> · temp 0.8<br>스크립트·스토리보드·썸네일</div>
+      <div class="a"><b>Reviewer</b> · temp 0.2<br>Eval 8종+채널중복 판정</div>
+    </div>
+    <p class="muted" style="margin-top:12px">
+      flash-lite 단일모델(호출당 ~0.05원) · originality·채널중복 코드 실측 주입(LLM 추측 아님) ·
+      한국 표시광고법·뒷광고 규제 차단 · 트렌드는 Sonar 실시간 웹검색(출처 포함)
+    </p>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const STEPS = [["supervisor","Supervisor"],["trend-live","트렌드 조사"],["trend-analyst","Trend Analyst"],["creator","Creator"],["reviewer","Reviewer"]];
+const SAMPLE_CHIPS = ["AI로 사장님 매출 올리는 법","비개발자가 알아야 할 백엔드 한 가지","노코드로 만드는 첫 자동화"];
+
+function renderChips(){ $("#chips").innerHTML = SAMPLE_CHIPS.map(c=>`<span class="chip">${c}</span>`).join("");
+  document.querySelectorAll(".chip").forEach(el=>el.onclick=()=>{ $("#topic").value=el.textContent; }); }
+function renderSteps(){ $("#steps").innerHTML = STEPS.map(([k,l])=>`<div class="step" data-k="${k}"><span class="dot"></span>${l}</div>`).join(""); }
+function setStep(k, state){ const el=$(`.step[data-k="${k}"]`); if(el){ el.classList.remove("active","done"); el.classList.add(state);} }
+
+async function run(topic){
+  $("#go").disabled=true;
+  ["#progress","#trendPanel","#result","#evalPanel"].forEach(s=>$(s).classList.add("hidden"));
+  $("#progress").classList.remove("hidden"); renderSteps();
+  $("#evalTable").querySelector("tbody").innerHTML="";
+  const evalRows = {};
+
+  const res = await fetch("/api/pd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic})});
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf="";
+  while(true){
+    const {value,done} = await reader.read(); if(done) break;
+    buf += dec.decode(value,{stream:true});
+    const parts = buf.split("\n\n"); buf = parts.pop();
+    for(const p of parts){
+      const ev = (p.match(/^event: (.+)$/m)||[])[1];
+      const dm = p.match(/^data: (.+)$/m); if(!dm) continue;
+      const d = JSON.parse(dm[1]); handle(ev, d, evalRows);
+    }
+  }
+  $("#go").disabled=false;
+}
+
+function handle(ev, d, evalRows){
+  const stage = d.stage;
+  if(stage==="supervisor"){ setStep("supervisor","done"); setStep("trend-live","active"); }
+  else if(stage==="trend-live"){ setStep("trend-live","done"); setStep("trend-analyst","active");
+    if(d.trends && d.trends.length){ $("#trendPanel").classList.remove("hidden");
+      $("#trends").innerHTML = d.trends.map(t=>`<div class="trend"><b>${t.keyword}</b> — ${t.why}</div>`).join("") +
+        (d.sources&&d.sources.length? `<div class="trend">출처: ${d.sources.map(s=>`<a href="${s.url}" target="_blank" rel="noopener">${s.title}</a>`).join(" · ")}</div>`:""); } }
+  else if(stage==="trend-analyst"){ setStep("trend-analyst","done"); setStep("creator","active"); }
+  else if(stage==="creator"){ setStep("creator","active"); setStep("reviewer","active"); }
+  else if(stage==="reviewer"){ const tb=$("#evalTable").querySelector("tbody");
+    if(!evalRows[d.metric]){ const tr=document.createElement("tr"); evalRows[d.metric]=tr; tb.appendChild(tr); }
+    evalRows[d.metric].innerHTML = `<td>${d.metric}</td><td class="${d.passed?'pass':'fail'}">${d.passed?'✅':'❌'}</td><td class="muted">${d.comment||''}</td>`;
+    $("#evalPanel").classList.remove("hidden"); }
+  else if(stage==="done"||stage==="escalated"){ STEPS.forEach(([k])=>setStep(k,"done"));
+    const p=d.payload||{};
+    $("#result").classList.remove("hidden");
+    $("#rTitle").textContent = d.title || p.title || "";
+    $("#rScript").textContent = p.script || "";
+    $("#rTags").textContent = (p.hashtags||[]).join(" ");
+    $("#rCost").textContent = `비용 ${d.cost_krw}원 · 토큰 ${(d.token_usage||{}).total||0} · ${stage==="escalated"?"검수 미달(반려)":"승인"}`; }
+  else if(stage==="error"){ alert("에러: "+(d.reason||"unknown")); loadSamples(); }
+}
+
+async function loadSamples(){
+  try {
+    const s = await (await fetch("/api/samples")).json();
+    if(!s.length) return;
+    $("#result").classList.remove("hidden");
+    $("#rTitle").textContent = "[샘플] "+s[0].title;
+    $("#rScript").textContent = s[0].script;
+    $("#rTags").textContent = s[0].hashtags;
+    $("#rCost").textContent = `사전 생성 샘플 ${s.length}건 · API 키 없거나 오류 시 폴백`;
+  } catch(e) {}
+}
+
+renderChips();
+$("#go").onclick = ()=>{ const t=$("#topic").value.trim(); if(t) run(t); };
+$("#topic").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#go").click(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Read(./90-assets/**)",
+      "Read(./20-knowledge/_archive/**)",
+      "Read(./10-inbox/_processed/**)",
+      "Read(./50-projects/_completed/**)",
+      "Edit(./_가이드/**)",
+      "Write(./_가이드/**)"
+    ],
+    "ask": [
+      "Edit(./CLAUDE.md)",
+      "Edit(./00-meta/personas/**)",
+      "Edit(./00-meta/schemas/**)",
+      "Bash(git push:*)",
+      "Bash(rm:*)"
+    ],
+    "allow": [
+      "Read(./**)",
+      "Write(./20-knowledge/**)",
+      "Edit(./20-knowledge/**)",
+      "Write(./10-inbox/**)",
+      "Edit(./10-inbox/**)",
+      "Write(./30-journal/**)",
+      "Edit(./30-journal/**)",
+      "Write(./50-projects/content-pd-agent/**)",
+      "Edit(./50-projects/content-pd-agent/**)",
+      "Edit(./00-meta/index.md)",
+      "Edit(./00-meta/log.md)",
+      "Bash(git status)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)"
+    ]
+  },
+  "env": {
+    "VAULT_ENV": "production",
+    "VAULT_ROLE": "ai-content-pd-agent"
+  }
+}

@@ -1,0 +1,67 @@
+---
+title: "작업 로그"
+type: journal
+status: active
+ai_priority: medium
+created: 2026-06-07
+updated: 2026-06-07
+tags:
+  - meta
+  - log
+related:
+  - "[[index]]"
+---
+
+# 작업 로그
+
+시계열 감사 로그. **새 항목은 항상 이 줄 바로 아래 최상단에 1줄로 추가**한다.
+
+- 2026-06-07 — 적대적 오케스트레이션 검증(4관점) 반영 결정론 누수 3건 수정(ADR-018): A 2티어 강제반려(hook음절>21·해시태그 하드위반 추가, 009 22음절 누수 차단)·B overclaim 회피 6종 보강+골든셋·C length/keyword 결정론화. D 문서정정(reviewer.md 코사인→difflib·단일진실원천, ORCHESTRATION/ARCHITECTURE 갱신). 45테스트 PASS. 거시구조는 4관점 만장일치 정당(과설계 없음).
+- 2026-06-07 — ARCHITECTURE.md 신설: 현 오케스트레이션 구조 종합(시스템 다이어그램·4에이전트·eval 12종·파일맵·불변원칙). ORCHESTRATION.md(상세설계)와 구분된 "한눈에 보기" 종합본. 실측 기반(함수 28·테스트 41). index 등록.
+- 2026-06-07 — /propose-research 'Gemini 2.5 Flash Lite 활용 전략'(172줄, _가이드 원본): 신규 0건. ADR-007로 이미 처리(채택 0, 영구거부 상세). ADR-007에 재점검 메모. **→ _가이드/ 8종 전부 처리 완료 + 외부 딥리서치 4종 완료 = propose-research/squeeze-report 소스 전면 소진.** (분석/판정 불요 — 처리이력 명백)
+
+- 2026-06-07 — 채용 제출물 완성(ADR-017 ACCEPT 3건): C1 PORTFOLIO.md(대표 5건 큐레이션+채널반영 주석)·C2 SESSION_LOG.md(/pd 009 전체 터미널 실행 증빙, eval 12종 ✅)·C6 ORCHESTRATION.md Eval 설계철학(12메트릭 선정근거+ADR 매핑). 회귀 41 PASS.
+- 2026-06-07 — /pd '비개발자가 AI로 사장님 가게 리뷰 자동 응대 만들기' → CONTENT_2026_009 승인(C2 세션로그용). eval 12종 전부 통과·트렌드 4건·채널중복 0.25. output/CONTENT_2026_009.md (비용 13.309원)
+- 2026-06-07 — /propose-research 'AI 콘텐츠 PD 에이전트 제작 가이드'(129줄, 채용 합격 가이드): 딥리서치 0건이나 **제출물 완성도 결손 3건 식별**(판정 ACCEPT 3·REJECT 3·DEFER 1). ✅C1 포트폴리오·C2 세션로그·C6 eval설계철학(합격 가치, 사용자 확인 후 진행). ❌C4 faker(의존성0 위반)·C7 추정CTR점수(ADR-010 가짜통과 회귀, Critical)·C5 폴더형식. ⏸️C3 로드맵(G8/9/10 중복). ADR-017. **→ _가이드/ 8종 전부 처리 완료.**
+
+- 2026-06-07 — /propose-research 'AI 에이전트 기반 SaaS 개발 방법론'(542줄, _가이드 원본): 신규 0건. 미반영 3건(.claudeignore=settings deny 중복, SessionStart/Stop 훅=🔵사용자결단)은 전부 인프라(딥리서치 아님). §4 Next.js/§6 MCP는 도메인무관·과설계. ADR-016. **→ _가이드/ 8종 전부 처리 완료(ADR-005~008·013~016). 외부 딥리서치 4종도 완료. propose-research 소스 소진.**
+
+- 2026-06-07 — /propose-research '유튜브 채널 철학 분석 방법'(89줄, _가이드 원본): 신규 0건. ADR-008로 이미 추출 완료(통찰 5건 채택→채널분석 노트 반영, 법인수치 거부). 짜낼 가치 소진. ADR-008에 재추출 차단 메모 추가. (분석/판정 에이전트 불요 — 처리이력 명백)
+
+- 2026-06-07 — 인프라 개선: schemas/naming.md 신설(CLAUDE.md §2 산재한 파일명·링킹·태그 규약 단일화, frontmatter.md와 역할분리). index 규약섹션 등록. settings.json plan모드 변경은 **의도적 미적용**(사용자 선호=즉시실행과 충돌). autoMemory 등도 불필요 복잡도라 미적용.
+
+- 2026-06-07 — /propose-research '옵시디언 연동 CLAUDE.MD 작성 가이드'(263줄, _가이드 원본=우리 CLAUDE.md 설계원본): 신규 0건. 실측 정합 — 섹션구조·YAML 이중따옴표·슬래시명령어(/day·/ingest·/lint·/pd) 전부 이미 적용. ADR-015에 통합(인프라 가이드 일괄: 볼트구조+CLAUDE.md 작성법 둘 다 범위 밖·이미 적용).
+
+- 2026-06-07 — /propose-research '옵시디언 볼트 디렉토리 최적화 제안'(253줄, _가이드 원본=현 볼트 설계원본): 신규 딥리서치 프롬프트 0건. 구조 이미 100% 적용(숫자접두사·격리·미니볼트). 분석이 12후보(agents.md·naming.md·process-inbox·settings 등) 추출했으나 전부 **딥리서치 프롬프트가 아닌 볼트 인프라/설정 작업** = 스킬 범위 밖 + 🔵 사용자 결단. 20-knowledge 3도메인은 의도적 편차(거부), 40-people·vault_migrate는 무관/과설계. ADR-015.
+
+- 2026-06-07 — /propose-research '단일 경량 모델 오케스트레이션 가이드'(666줄, _가이드 원본): 신규 0건. ADR-005/006이 이미 추출, 666줄 재정독해도 잔여가치 0. 분석에이전트 8후보 중 5개 "적용가능" 추천 → 독립 판정에이전트(haiku) 8개 전부 REJECT(async/Pydantic=의존성0위반, config=ADR-006 보류, 캐싱/thinking/GoogleSearch=BizRouter불가 ADR-007, streaming/CodeExec=YAGNI). 분석/판정 분리가 엔터프라이즈 패턴 도입 자기기만 차단. ADR-014.
+
+- 2026-06-07 — /squeeze-report 'Perplexity Sonar 활용법'(164줄): 우리 Sonar 구현이 모범사례와 정합 검증 — user 메시지 중심·citations 배열 추출 이미 정합, fetch_live_trends 프롬프트를 구체·서술형+그라운딩으로 강화. ORCHESTRATION.md Sonar 절 신설. BizRouter 경유 불가(전용 파라미터·LangChain·Pydantic·RAG·가격표) 영구거부(ADR-007 전례). ADR-013. 회귀 41 PASS.
+
+- 2026-06-07 — /squeeze-report '한국어 헤드라인 구체성 CTR 연구'(142줄, G4 답): 보고서 결론이 "전이 미검증"이라 사실성 분리 핵심. **상승 구간 한국어 일치(검증)** + 하이브리드 공식·관계적 구체성·길이 제약 채택 → [[훅 구체성 역U자 법칙]] 정밀화. **하락 구간(역U자 우하향) 한국어 전이는 영구거부**(데이터 부재, "검증됨" 오채택 회피). G4 "통째 미검증"→"부분 해소(상승 검증/하락 미검증)" 격상. ADR-012. 회귀 영향 0(지식노트만).
+
+- 2026-06-07 — /propose-research '한국어 헤드라인 구체성 CTR 연구': 신규 프롬프트 0건(G4 결손의 딥리서치 답이라 신규 불필요). PROMPT status 정정 3건 — 헤드라인역U자(G4)·쇼츠정량(G5)·채널성장 모두 draft→answered. 보고서는 squeeze-report 대상. **딥리서치 프롬프트 풀 3종 전부 답 수신 완료 = 미답 결손 0.**
+
+- 2026-06-07 — /squeeze-report '한국 AI 교육 유튜브 성장 분석'(190줄): 경쟁채널 벤치마크(조코딩·장피엠·에어빌드)·롱폼↔쇼츠 퍼널·3대 훅패턴·한국 B2C/서구 B2B 구조 채택. 신규 노트 [[한국 AI 교육 유튜브 시장 구조]] + [[훅 구체성 역U자 법칙]] 3대 패턴 절 + hook_concreteness eval evidence 보강. 자기신고 수익수치·구독자수 영구거부(ADR-008/010 정합). ADR-011. 회귀 41 PASS. (코드 변경 0 — 시장 맥락 지식)
+
+- 2026-06-07 — 팩트체크 추가(사용자 요청): 별도 5번째 에이전트 거부, Reviewer 하이브리드 강화. overclaim_check(과장단정 패턴 결정론)+extract_numeric_claims(수치주장 추출)+factual_accuracy eval. 비용 0(코드실측→payload→Reviewer 자동주입). 실동작 검증(과장 4-flag·정상통과·수치추출). 41테스트 PASS. ADR-010(ADR-007 과설계거부 정합).
+
+- 2026-06-07 — /squeeze-report '숏폼 스크립트 정량 구조 연구'(140줄): G5 결손 본문화. 한국어 음절(SPM 356·훅 18~21음절)·해시태그 1~5개 결정론 측정 2종 신설(korean_syllable_density·hashtag_count eval, 함수 구현, 38테스트 PASS), 구간배분·정보사다리·패턴인터럽트는 [[쇼츠 스크립트 구조와 길이]]·retention_design 반영. 5초루프꼼수·WPM 1:1전이 영구거부. ADR-009. G4 한국어 전이의 부분 해답(시간비율 전이·발화량 음절).
+
+- 2026-06-07 — B6 종단 검증(데모 서버 SSE): 신규 주제 '인스타 자동화'로 전 파이프라인 라이브 확인 → CONTENT_2026_008 승인(트렌드 5건+출처 8개·originality 0.0937·channel-dup 0.25·Eval 8종, 비용 11.945원). 채널중복 overlap·Sonar 견고파싱 수정 입증.
+- 2026-06-07 — ⚠ CONTENT_2026_007: B6 종단 1차에서 채널중복 결함 노출 증거물. '개발 없이 5일 만에 수익 웹서비스' 주제가 채널 실제 영상과 자카드 0.5로 **잘못 승인**됨(구버전). overlap coefficient 보강(0.6667 차단)으로 수정 완료. 데모 샘플 부적합 — 결함 기록용 보존.
+- 2026-06-07 — G6 모델: 비용 사유로 MODEL → google/gemini-2.5-flash-lite 되돌림(사용자 결단). 3.1은 단가 2.85배인데 품질 우위 미측정이라 정당화 불가. 종료(2026-10-16)까지 4개월+ 여유 → horizon 임박 시 1줄 교체(가용성·절차 실증됨). 회귀 9건 PASS. ADR-006 갱신.
+- 2026-06-07 — G6실행 3.1-flash-lite 교체 실증: 라이브 chat probe 2모델 검증(json_object·usage 4키 OK) → 회귀 9건 PASS → /pd 종단 재검증(CONTENT_2026_006 승인, Eval 8종·originality 0.1059·income_claim 한국규제 차단 동작). ⚠ 단가 2.85배 관찰(ADR-006) → 위 줄에서 2.5로 되돌림.
+- 2026-06-07 — /pd 'AI한테 코딩 시킬 때 초보가 가장 많이 하는 실수 3가지' → CONTENT_2026_006 승인. output/CONTENT_2026_006.md (비용 13.870원)
+- 2026-06-07 — domain-priorities AI단독 결손 3건 일괄 처리: G1(originality 코사인 유사도 결정론 실구현+강제반려, 회귀 9건), G3(한국 표시광고법·공정위 반영), G6/G7(은퇴일 2026-10-16 검증·gemini-3.1-flash-lite 마이그레이션 절차). /pd 005로 G1 종단검증(실측 0.1297).
+- 2026-06-07 — /pd '노코드로 사장님 가게 예약 시스템 만들기' → CONTENT_2026_005 승인. output/CONTENT_2026_005.md (비용 3.011원)
+- 2026-06-07 — /domain-priorities: 결손 10건 5차원 점수화 → domain-priorities-2026-06-07.md. 1위 G1(코사인 유사도 실구현 40점), 2위 G6(모델 마이그레이션), 3위 G3(한국 수익규제). 은퇴일 2026-10-16 라이브 검증.
+- 2026-06-07 — /squeeze-report '유튜브 채널 철학 분석'(89줄): 채널 통찰 5건 채택해 [[양실장 바이브코딩대학 채널 분석]] 보강(영업>코딩·5주계획·SME블루오션·경력≠만족). 법인 수치는 교차검증 불완전+불필요로 영구거부. ADR-008.
+- 2026-06-07 — /squeeze-report 'Flash Lite 활용 전략'(172줄, 직전과 90% 중복): 채택 0. Flex/암시적캐싱은 BizRouter 측정불가, 나머지 Google SDK 전용 중복. 가격 $0.10/$0.40만 외부검증. ADR-007 영구거부 기록.
+- 2026-06-07 — /squeeze-report(분석/판정 분리): Flash-Lite 오케스트레이션 가이드에서 ACCEPT 2(C2 온도 문서화·C3 토큰 로깅)·REJECT 3(과설계)·기각 10(Google SDK 전용). C3 회귀 4건 PASS, ADR-005/006 기록.
+- 2026-06-07 — /pd 'AI 코딩 입문자가 처음 만든 것' → CONTENT_2026_004 승인. output/CONTENT_2026_004.md (비용 2.631원)
+- 2026-06-07 — 딥리서치(104 에이전트) → 검증 지식 5종 영속화: 알고리즘 신호·훅 역U자·수익 리스크·스크립트 구조. 기존 훅 가정 교정, eval 8종 확장, 페르소나·CLAUDE.md 반영. /pd 재가동으로 신규 검사 작동 확인.
+- 2026-06-07 — /pd 'AI로 비개발자가 만든 첫 앱, 무엇이 달랐나' → CONTENT_2026_003 승인. output/CONTENT_2026_003.md (비용 2.697원)
+- 2026-06-07 — /pd '개발 없이 5일 만에 수익 웹서비스 만드는 비법' → CONTENT_2026_001 승인. output/CONTENT_2026_001.md (비용 2.309원)
+- 2026-06-07 — 오케스트레이터 구축: orchestrator.py(BizRouter×gemini-2.5-flash-lite, 4-에이전트 Eval 루프) + ORCHESTRATION.md. 실가동 검증 완료.
+- 2026-06-07 — 볼트 초기 구축: 엔드게임 디렉토리 골격, CLAUDE.md, settings.json, 4-에이전트 페르소나, 슬래시 커맨드 5종, LLM 위키 시드 노트 생성.

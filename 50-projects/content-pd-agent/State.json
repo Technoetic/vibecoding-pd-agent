@@ -1,0 +1,665 @@
+{
+  "_comment": "오케스트레이션 실시간 상태 저장소. Supervisor가 읽고 쓴다. tasks 배열에 핸드오프 페이로드를 누적한다.",
+  "vault_role": "ai-content-pd-agent",
+  "max_retries": 3,
+  "current_task_id": "CONTENT_2026_009",
+  "tasks": [
+    {
+      "task_id": "CONTENT_2026_000_EXAMPLE",
+      "topic": "(예시) 개발 없이 5일 만에 수익 웹서비스 비법",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "pending_analysis",
+      "retry_count": 0,
+      "content_payload": {
+        "keywords": [],
+        "hooks": [],
+        "script": null,
+        "storyboard": null,
+        "thumbnail_prompt": null,
+        "hashtags": []
+      },
+      "wiki_references": [
+        "20-knowledge/trends/양실장 바이브코딩대학 채널 분석.md",
+        "20-knowledge/hooks/바이럴 훅 3초 법칙.md"
+      ],
+      "feedback_log": []
+    },
+    {
+      "task_id": "CONTENT_2026_001",
+      "topic": "개발 없이 5일 만에 수익 웹서비스 만드는 비법",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 1,
+      "content_payload": {
+        "keywords": [
+          "개발 없이 웹서비스",
+          "5일 수익화",
+          "비개발자 창업",
+          "AI 웹서비스",
+          "앱 없이 수익"
+        ],
+        "hooks": [
+          "개발 없이 5일 만에 웹서비스 만드는 법, 알려드립니다.",
+          "코딩 한 줄도 안 쳤는데 5일 만에 웹서비스로 수익이 났습니다."
+        ],
+        "title": "개발 없이 5일 만에 수익 웹서비스 만드는 비법",
+        "script": "개발 한 줄도 안 쳤는데 5일 만에 웹서비스로 수익이 났습니다. 믿기시나요? 오늘은 비개발자도 AI를 활용해서 5일 만에 수익형 웹서비스를 뚝딱 만드는 비법을 알려드릴게요. 코딩 실력 제로라도 괜찮습니다. 최신 AI 빌더 툴을 사용하면 복잡한 개발 과정 없이도 아이디어만 있으면 서비스 구현이 가능해요. 특히 AI 웹서비스는 자동화된 고객 응대, 개인 맞춤 추천, 데이터 분석 등 다양한 기능을 손쉽게 탑재할 수 있어 경쟁력이 높습니다. 예를 들어, AI 챗봇 기반의 상담 서비스나, AI 이미지 생성 기반의 디자인 플랫폼 같은 것들이 있죠. 이런 서비스는 초기 구축 비용이 적고, AI의 지속적인 학습을 통해 성능을 개선할 수 있다는 장점도 있어요. 5일 뒤, 여러분도 직접 만든 웹서비스로 수익을 창출하는 경험을 할 수 있습니다. 지금 바로 시작하세요!",
+        "storyboard": [
+          "화면: '개발 없이 5일 만에 웹서비스로 수익 창출!' 문구가 강렬하게 등장.",
+          "화면: '코딩 한 줄도 안 쳤는데 5일 만에 웹서비스로 수익이 났습니다.' 라는 자막과 함께 놀라는 표정의 사람 이미지.",
+          "화면: '비개발자도 AI로 5일 만에 수익 웹서비스 만들기' 라는 텍스트 오버레이.",
+          "화면: 다양한 AI 빌더 툴 아이콘들이 빠르게 지나가는 장면.",
+          "화면: AI 챗봇, AI 이미지 생성 등 AI 웹서비스 활용 사례를 보여주는 그래픽.",
+          "화면: '자동화된 고객 응대', '개인 맞춤 추천', '데이터 분석' 등 AI 웹서비스 장점 키워드 등장.",
+          "화면: 'AI 챗봇 상담', 'AI 디자인 플랫폼' 등 구체적인 서비스 예시 이미지.",
+          "화면: '초기 구축 비용 ↓', '지속적 성능 개선 ↑' 등 AI 서비스의 경제적/기술적 이점 강조.",
+          "화면: '5일 뒤, 여러분도 성공합니다!' 라는 희망적인 메시지와 함께 서비스 성공을 상징하는 그래프 등장.",
+          "화면: '지금 바로 시작하세요!' 라는 콜투액션과 함께 채널 구독 버튼 애니메이션."
+        ],
+        "thumbnail_prompt": "A visually striking image with a split design. The left side shows a frustrated person looking at lines of code with a red 'X' over it, symbolizing the absence of coding. The right side shows a smiling person confidently looking at a laptop screen displaying a successful web service interface with a green upward trending graph and dollar signs. Bold, clear text overlay reads: '5일 만에 웹서비스 수익화! (개발 없이)'. The overall color scheme should be vibrant and engaging, hinting at success and ease.",
+        "hashtags": [
+          "#개발없이웹서비스",
+          "#5일수익화",
+          "#비개발자창업",
+          "#AI웹서비스",
+          "#앱없이수익"
+        ]
+      },
+      "wiki_references": [],
+      "feedback_log": [
+        {
+          "retry": 0,
+          "feedback": [
+            "스크립트 길이가 68단어로, 최소 100단어 기준에 미달합니다. 최소 32단어 이상 내용을 추가하여 스크립트를 확장해주세요. 특히, AI 웹서비스의 구체적인 장점이나 활용 사례를 더 자세히 설명하면 좋을 것 같습니다. (예: [[AI 웹서비스 활용 사례]] 참고)"
+          ]
+        }
+      ]
+    },
+    {
+      "task_id": "CONTENT_2026_002",
+      "topic": "AI로 비개발자가 만든 첫 앱, 무엇이 달랐나",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "failed",
+      "retry_count": 0,
+      "content_payload": {
+        "keywords": [
+          "AI 앱 개발",
+          "비개발자 앱 만들기",
+          "AI 수익화 앱",
+          "첫 앱 성공 사례",
+          "앱 개발 자동화"
+        ],
+        "hooks": [
+          "AI로 비개발자가 만든 첫 앱, 뭐가 달랐을까?",
+          "코딩 없이 AI로 앱 만들고 수익화하는 법?",
+          "AI 앱 개발, 비개발자가 성공하는 비결 공개."
+        ],
+        "title": "AI 앱 개발, 비개발자가 성공하는 비결은?",
+        "script": "코딩 없이 AI로 나만의 앱을 만들고 싶으신가요? 비개발자도 AI로 첫 앱을 성공시킨 특별한 점이 궁금하다면 주목하세요! 첫 3초, AI가 코딩 없이 어떻게 앱을 만들고 수익화까지 가능하게 했는지, 그 비결을 공개합니다. 개발자 없이도 5일 만에 나만의 서비스를 출시하고 싶다면, 이 영상이 답이 될 거예요. AI 앱 개발, 비개발자가 성공하는 진짜 이유, 지금 바로 알려드릴게요!",
+        "storyboard": [
+          "AI로 만든 첫 앱, 비개발자 성공 사례 소개",
+          "코딩 없이 앱 만들기, AI의 역할 강조",
+          "AI 앱 수익화 가능성 제시",
+          "성공 사례 구체적인 성과 (기간, 수익 등) 언급",
+          "비개발자도 할 수 있다는 점 강조",
+          "마무리 CTA (구독, 다음 영상 시청 유도)"
+        ],
+        "thumbnail_prompt": "A split image showing on one side a person (non-developer) looking excited and holding a smartphone with a simple app interface, and on the other side, a stylized AI brain graphic connected to app icons. Text overlay: 'AI 앱 성공 비결!'",
+        "hashtags": [
+          "#AI앱개발",
+          "#비개발자앱",
+          "#AI수익화",
+          "#앱개발자동화",
+          "#첫앱성공"
+        ]
+      },
+      "wiki_references": [],
+      "feedback_log": [
+        {
+          "note": "Reviewer 응답이 max_tokens(900)에서 잘림. orchestrator max_tokens 1800으로 상향 + finish_reason 잘림 감지 추가로 수정됨. 재실행은 003으로 성공."
+        }
+      ]
+    },
+    {
+      "task_id": "CONTENT_2026_003",
+      "topic": "AI로 비개발자가 만든 첫 앱, 무엇이 달랐나",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 0,
+      "content_payload": {
+        "keywords": [
+          "AI 앱 개발",
+          "비개발자 앱 제작",
+          "첫 앱 성공",
+          "AI 툴 활용",
+          "앱 수익화 비결"
+        ],
+        "hooks": [
+          "AI로 첫 앱 만들었는데, 이게 진짜 된다고?",
+          "비개발자 3주 만에 앱 출시? AI가 싹 다 했다.",
+          "코딩 한 줄 없이 AI로 첫 앱 만들고 바로 수익 낸 비결"
+        ],
+        "title": "AI로 비개발자가 만든 첫 앱, 무엇이 달랐나?",
+        "script": "AI로 첫 앱 만들었는데, 이게 진짜 된다고? 코딩 한 줄 없이 3주 만에 앱 출시하고 바로 수익 낸 비결, 궁금하지 않으세요? 첫 앱인데도 불구하고 개발자 없이 AI 툴을 활용해 3주 만에 놀라운 성과를 낸 사례가 있습니다. 기존의 앱 개발 방식과는 완전히 달랐죠. 핵심은 'AI 툴 활용 능력'과 '빠른 실행력'이었습니다. 복잡한 코딩 대신, AI가 디자인부터 코드 생성까지 지원하는 툴들을 적극 사용했죠. 덕분에 아이디어 구체화부터 출시까지 시간을 단축하고, 출시 후에도 AI 기반 마케팅으로 빠르게 수익화를 달성할 수 있었습니다. 여러분도 AI로 첫 앱을 성공적으로 만들 수 있습니다. 다음 영상에서 구체적인 AI 툴과 수익화 전략을 공개할게요. 구독하고 놓치지 마세요!",
+        "storyboard": [
+          "화면: AI 로고와 함께 'AI로 만든 첫 앱?'이라는 텍스트 오버레이",
+          "화면: '코딩 한 줄 없이 3주 만에 앱 출시?'라는 질문과 함께 놀라는 표정의 사람 이미지",
+          "화면: 앱 개발 과정을 간략하게 보여주는 애니메이션 (코딩 없이 AI 툴 사용 모습)",
+          "화면: 'AI 툴 활용' 및 '빠른 실행력' 키워드 강조",
+          "화면: 앱 스토어에서 수익이 발생하는 그래프 또는 숫자 시각화",
+          "화면: 'AI 기반 마케팅' 키워드와 함께 홍보 이미지/영상 효과",
+          "화면: '당신도 할 수 있습니다!'라는 긍정적 메시지",
+          "화면: 다음 영상 예고 (AI 툴, 수익화 전략)와 함께 '구독' 버튼 애니메이션"
+        ],
+        "thumbnail_prompt": "A split image. On the left, a person with a confused but excited expression looking at a laptop screen displaying complex code. On the right, the same person, now smiling confidently, holding a smartphone with a successful app interface and a chart showing upward revenue. The background is a blend of futuristic AI elements and a clean, modern workspace. Text overlay: 'AI 앱 개발: 비개발자 성공 비결!'",
+        "hashtags": [
+          "#AI앱개발",
+          "#비개발자앱제작",
+          "#첫앱성공",
+          "#AI툴활용",
+          "#앱수익화비결",
+          "#AI창업",
+          "#개발없이앱만들기"
+        ]
+      },
+      "wiki_references": [],
+      "feedback_log": []
+    },
+    {
+      "task_id": "CONTENT_2026_004",
+      "topic": "AI 코딩 입문자가 처음 만든 것",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 0,
+      "content_payload": {
+        "keywords": [
+          "AI 코딩 입문",
+          "첫 AI 프로젝트",
+          "AI 코딩 결과물",
+          "초보 AI 개발",
+          "AI 코딩 경험"
+        ],
+        "hooks": [
+          "AI 코딩, 첫 작품으로 이게 나왔다고?",
+          "AI로 코딩 입문자가 만든 의외의 결과물",
+          "첫 AI 코딩 프로젝트, 결과는 놀라웠다?"
+        ],
+        "title": "AI 코딩 입문자가 처음 만든 것: 결과는 놀라웠다?",
+        "script": "AI 코딩, 첫 작품으로 이게 나왔다고? 🤖 코딩 입문자가 AI로 처음 만든 결과물을 공개합니다! 'AI 코딩 입문', '첫 AI 프로젝트' 키워드로 도전했는데… 과연 결과는? 🧐 처음엔 막막했지만, AI의 도움으로 놀라운 결과물을 만들어냈어요. 초보 AI 개발자에게도 AI 코딩 경험은 정말 특별했죠. 여러분도 AI 코딩, 도전해보는 건 어떠세요? 여러분의 첫 AI 프로젝트는 무엇이었나요? 댓글로 공유해주세요! 👇 #AI코딩 #첫AI프로젝트 #AI코딩결과물 #초보AI개발 #AI코딩경험",
+        "storyboard": [
+          "화면 전환: AI 코딩 입문자가 코딩 화면 앞에서 망설이는 모습.",
+          "자막: \"AI 코딩, 첫 작품으로 이게 나왔다고?\"",
+          "화면 전환: AI가 코딩 중인 모습, 또는 코드 조각들이 빠르게 생성되는 그래픽.",
+          "자막: 'AI 코딩 입문', '첫 AI 프로젝트' 키워드로 도전!",
+          "화면 전환: 입문자가 만든 결과물의 일부를 빠르게 보여주기 (예: 간단한 웹페이지 UI, 데이터 시각화 등).",
+          "자막: 초보 AI 개발도 AI 도움으로 충분히 가능!",
+          "화면 전환: 입문자가 결과물을 보며 놀라거나 만족하는 표정.",
+          "자막: 여러분의 첫 AI 프로젝트는 무엇이었나요?",
+          "화면 전환: 다음 영상 예고 또는 구독/좋아요 유도.",
+          "자막: 댓글로 공유해주세요! 👇"
+        ],
+        "thumbnail_prompt": "A split image. On the left, a slightly confused but hopeful beginner coder looking at a laptop screen showing lines of code with AI-related icons. On the right, a vibrant, successful-looking AI-generated output (e.g., a sleek app interface or a dynamic data visualization). The overall mood is exciting and aspirational. Use bright, tech-inspired colors. Text overlay: 'AI 코딩 첫 결과물?!' with a question mark.",
+        "hashtags": [
+          "#AI코딩",
+          "#첫AI프로젝트",
+          "#AI코딩결과물",
+          "#초보AI개발",
+          "#AI코딩경험"
+        ]
+      },
+      "wiki_references": [],
+      "feedback_log": [],
+      "token_usage": {
+        "prompt": 12475,
+        "completion": 1142,
+        "total": 13617,
+        "calls": 3
+      },
+      "cost_krw": 2.6314
+    },
+    {
+      "task_id": "CONTENT_2026_005",
+      "topic": "노코드로 사장님 가게 예약 시스템 만들기",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 0,
+      "content_payload": {
+        "keywords": [
+          "노코드 예약 시스템",
+          "사장님 예약 관리",
+          "간편 예약 솔루션",
+          "매장 예약 자동화",
+          "매출 증대 예약"
+        ],
+        "hooks": [
+          "코딩 없이 3분 만에! 사장님 가게 예약 시스템 만들기",
+          "이 영상 하나로 예약 관리 끝! 노코드 예약 시스템 직접 만들어봐요.",
+          "매출 올리는 예약 시스템, 코딩 없이 뚝딱 만드는 법 공개!"
+        ],
+        "title": "코딩 없이 3분 만에! 사장님 가게 예약 시스템 만들기",
+        "script": "사장님, 예약 관리 때문에 골치 아프시죠? 매번 전화 응대하고, 예약 누락될까 걱정하고… 이제 코딩 없이 3분 만에 끝낼 수 있습니다! 오늘 소개해 드릴 노코드 예약 시스템은 사장님의 소중한 시간을 아껴주고, 매출 증대까지 도와줄 마법 같은 솔루션이에요. 따로 프로그램 설치도 필요 없고, 스마트폰으로도 언제든 예약 현황을 확인하고 관리할 수 있죠. 복잡한 기능 없이 딱 필요한 기능만 담아서 정말 사용하기 쉬워요. 지금 바로 영상 따라오셔서 사장님 가게에 딱 맞는 예약 시스템, 쉽고 빠르게 만들어 보세요!",
+        "storyboard": [
+          "영상 시작: 신나는 배경음악과 함께 '코딩 없이 3분 만에! 사장님 가게 예약 시스템 만들기'라는 타이틀 오버레이.",
+          "문제 제기: 전화벨이 울리고 사장님이 바쁘게 메모하는 장면, 혹은 예약 누락된 종이를 보며 당황하는 모습.",
+          "솔루션 제시: '노코드 예약 시스템'이라는 단어가 나타나고, 깔끔한 UI의 예약 시스템 화면이 빠르게 스쳐 지나간다.",
+          "핵심 기능 강조: 스마트폰으로 예약 현황을 확인하는 모습, 간편하게 예약 일정을 추가하는 모습.",
+          "쉬운 사용성 강조: 복잡한 코딩 대신 직관적인 버튼 클릭으로 예약 시스템을 설정하는 과정을 보여준다 (빠르게).",
+          "결과 강조: '매출 증대', '시간 절약' 등의 긍정적인 키워드와 함께 웃는 사장님 모습.",
+          "CTA: '지금 바로 따라하세요!'라는 문구와 함께 채널 구독, 다음 영상 시청을 유도하는 장면."
+        ],
+        "thumbnail_prompt": "A friendly-looking small business owner (e.g., cafe owner, salon owner) smiling and holding a smartphone displaying a clean, modern booking interface. The background should be a bright, inviting representation of their store. Overlay text: '3분 예약 시스템'. Style: Vibrant, modern, approachable.",
+        "hashtags": [
+          "#노코드예약시스템",
+          "#사장님예약관리",
+          "#간편예약솔루션",
+          "#매장예약자동화",
+          "#매출증대예약",
+          "#스마트스토어",
+          "#자영업자",
+          "#온라인예약"
+        ],
+        "originality": {
+          "max_similarity": 0.1297,
+          "most_similar_to": 1,
+          "is_original": true
+        }
+      },
+      "wiki_references": [],
+      "feedback_log": [],
+      "token_usage": {
+        "prompt": 14430,
+        "completion": 1266,
+        "total": 15698,
+        "calls": 3
+      },
+      "cost_krw": 3.0111
+    },
+    {
+      "task_id": "CONTENT_2026_006",
+      "topic": "AI한테 코딩 시킬 때 초보가 가장 많이 하는 실수 3가지",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 1,
+      "content_payload": {
+        "keywords": [
+          "AI 코딩 실수",
+          "바이브코딩",
+          "비개발자 창업",
+          "AI 프롬프트 오류",
+          "개발자 없이 서비스 만들기"
+        ],
+        "hooks": [
+          "AI한테 코딩 시키는데 결과가 엉망이라면? 딱 3가지만 바꾸세요.",
+          "대부분의 초보가 AI 코딩할 때 여기서 다 막힙니다. 3분 뒤엔 해결됩니다.",
+          "코딩 한 줄 몰라도 됩니다. 단, AI에게 '이것' 안 시키면 무조건 실패합니다."
+        ],
+        "title": "코딩 한 줄 몰라도 됩니다. 단, AI에게 '이것' 안 시키면 무조건 실패합니다.",
+        "script": "AI한테 코딩 시키는데 결과가 엉망인가요? 대부분의 비개발자가 범하는 치명적인 실수 3가지를 짚어드립니다. 첫째, '알아서 다 해줘'식의 뭉뚱그린 프롬프트입니다. AI는 훌륭한 비서지만, 구체적인 설계도 없이는 길을 잃습니다. 원하는 기능과 데이터 흐름을 명확히 정의하세요. 둘째, 단계별 검증을 건너뛰는 것입니다. 한 번에 모든 코드를 짜달라고 하지 마세요. 작은 단위로 나눠서 에러를 잡아야 합니다. 셋째, AI가 짠 코드를 맹신하는 것입니다. 로직이 맞는지 반드시 직접 흐름을 확인해야 사고를 방지합니다. 바이브코딩은 코딩을 배우는 게 아니라, AI라는 도구를 지휘하는 능력입니다. 이 3가지만 기억해도 작업 효율이 완전히 달라질 겁니다. 지금 바로 이 원칙을 적용해 웹서비스 런칭을 시도해볼 수 있습니다. 더 자세한 방법이 궁금하다면 채널의 고정 댓글을 확인해보세요.",
+        "storyboard": [
+          "0-3초: 훅 구간. 당황하는 사람의 얼굴과 '코딩 엉망?' 자막 오버레이",
+          "3-15초: 1번 실수 설명. 추상적인 프롬프트 vs 구체적인 설계도 비교 화면",
+          "15-30초: 2번 실수 설명. 쪼개서 질문하는 모습과 에러 해결 과정 시각화",
+          "30-45초: 3번 실수 설명. 코드 검토하는 모습. '맹신 금지' 경고 아이콘",
+          "45-60초: 마무리. 바이브코딩 철학 강조 및 고정 댓글 CTA"
+        ],
+        "thumbnail_prompt": "A surprised person looking at a laptop screen with complex red error code overlays, high contrast, vibrant professional YouTube thumbnail style, text overlay: 'AI 코딩 3대 실수'",
+        "hashtags": [
+          "#AI코딩실수",
+          "#바이브코딩",
+          "#비개발자창업",
+          "#AI프롬프트",
+          "#1인개발"
+        ],
+        "originality": {
+          "max_similarity": 0.1059,
+          "most_similar_to": 1,
+          "is_original": true
+        }
+      },
+      "wiki_references": [],
+      "feedback_log": [
+        {
+          "retry": 0,
+          "feedback": [
+            "스크립트 길이를 100단어 이상으로 확장하십시오 (현재 약 95단어).",
+            "마지막 문장의 '오늘 바로 웹서비스 런칭 가능합니다'를 '오늘 바로 웹서비스 런칭을 시도해볼 수 있습니다'와 같이 확정적 표현을 지양하는 문구로 수정하십시오."
+          ]
+        }
+      ],
+      "token_usage": {
+        "prompt": 23098,
+        "completion": 2139,
+        "total": 25237,
+        "calls": 5
+      },
+      "cost_krw": 13.8698
+    },
+    {
+      "task_id": "CONTENT_2026_007",
+      "topic": "개발 없이 5일 만에 수익 웹서비스 만드는 비법",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 1,
+      "content_payload": {
+        "live_trends": {
+          "trends": [],
+          "sources": []
+        },
+        "keywords": [
+          "비개발자 웹서비스",
+          "5일 수익화",
+          "AI 웹서비스 제작",
+          "창업 노하우",
+          "빠른 웹서비스 개발"
+        ],
+        "hooks": [
+          "개발 없이 5일 만에 수익 웹서비스 만드는 비법 공개!",
+          "AI로 5일 만에 웹서비스 만들고 수익화하는 비결은?",
+          "코딩 1줄 없이, 5일 만에 나만의 수익 웹서비스 만들기"
+        ],
+        "title": "개발 없이 5일 만에 수익 웹서비스 만들기: AI와 함께라면?",
+        "script": "개발 지식이 없어도 괜찮아요! AI만 있다면 5일 만에 나만의 수익 웹서비스를 만들고 바로 돈을 벌 수 있다는 거, 알고 계셨나요?  'AI 웹서비스 제작', '빠른 웹서비스 개발'에 관심 있는 비개발자분들, 주목해주세요.  기존에는 상상도 못 했던 '5일 수익화'의 비밀, 지금부터 공개합니다.  개발 없이 뚝딱, AI에게 맡기는 코딩!  이 과정을 통해 당신의 아이디어가 어떻게 실제 수익으로 이어지는지, 구체적인 노하우를 알려드릴게요.  더 이상 미루지 말고, 지금 바로 당신의 비즈니스를 시작해보세요!  '창업 노하우'의 핵심은 바로 이것, 끝까지 보시면 압니다.  #비개발자웹서비스 #5일수익화 #AI웹서비스제작 #창업노하우 #빠른웹서비스개발",
+        "storyboard": [
+          "화면 전환: '개발 없이 5일 만에 수익 웹서비스 만들기?'라는 질문이 텍스트 오버레이로 등장.",
+          "AI 이미지 생성: AI가 코딩하는 듯한 추상적인 이미지 또는 챗GPT 같은 AI 아이콘과 웹사이트 화면이 빠르게 지나감.",
+          "핵심 숫자 강조: '5일'이라는 숫자가 크게 강조되며, 그 옆에 '수익'이라는 단어가 함께 나타남.",
+          "대상 특정: '비개발자', '1인 사업가', '부업 희망자' 등의 키워드가 화면에 등장하며 타겟을 명확히 함.",
+          "긍정적 결과 제시: 실제 수익이 발생하는 그래프나 돈이 쌓이는 이미지, 혹은 만족스러운 표정의 사람이 등장.",
+          "핵심 원리 소개: 'AI 활용', '빠른 개발', '자동화' 등의 키워드와 함께 간결한 설명 제공 (예: AI가 코드를 짜주고, 5일 안에 웹사이트 완성!).",
+          "다음 단계 유도: '당신의 아이디어를 수익으로!', '지금 바로 시작하세요!' 등의 문구와 함께 구독, 좋아요, 댓글 유도."
+        ],
+        "thumbnail_prompt": "A vibrant and engaging thumbnail for a YouTube Short. The central image features a stylized AI robot seamlessly integrating with a laptop screen displaying a growing revenue graph. Bold text overlay reads \"5일 만에 수익 웹서비스\" with a smaller subtitle \"AI로 뚝딱!\". The background is a gradient of bright, optimistic colors (e.g., blue and orange) suggesting innovation and speed. Include subtle elements of coding or web design icons. The overall style should be modern, clean, and highly clickable, emphasizing speed and ease of creation for non-developers.",
+        "hashtags": [
+          "#비개발자웹서비스",
+          "#5일수익화",
+          "#AI웹서비스제작",
+          "#창업노하우",
+          "#빠른웹서비스개발",
+          "#AI창업",
+          "#디지털노마드"
+        ],
+        "originality": {
+          "max_similarity": 0.1538,
+          "most_similar_to": 0,
+          "is_original": true
+        },
+        "channel_dup": {
+          "max_jaccard": 0.5,
+          "most_similar_title": "개발 없이 5일 만에 수익 웹서비스  비법 공개!  #바이브코딩",
+          "is_distinct": true
+        }
+      },
+      "wiki_references": [],
+      "feedback_log": [
+        {
+          "retry": 0,
+          "feedback": [
+            "채널 중복 체크에서 유사도가 높게 나왔습니다. 기존 영상과 차별화되는 새로운 앵글이나 구체적인 방법론을 강조하여 재작성해주세요.",
+            "훅의 '5일 만에 수익 웹서비스'라는 표현이 흔하게 사용되는 앵글일 수 있습니다. 숫자를 강조하기보다, 이 서비스만이 제공할 수 있는 독창적인 가치나 차별화된 전략을 부각하는 방향으로 훅을 수정하는 것을 고려해보세요."
+          ]
+        }
+      ],
+      "token_usage": {
+        "prompt": 24718,
+        "completion": 3222,
+        "total": 27944,
+        "calls": 6
+      },
+      "cost_krw": 14.0084
+    },
+    {
+      "task_id": "CONTENT_2026_008",
+      "topic": "AI로 동네 카페 단골 만드는 인스타 자동화",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 0,
+      "content_payload": {
+        "live_trends": {
+          "trends": [
+            {
+              "keyword": "에이전틱 AI 기반 자동화",
+              "why": "자연어 지시만으로 AI가 작업을 분해·실행·검증하는 흐름이 2026년 바이브코딩의 핵심으로 꼽혀, 인스타 DM·댓글·예약 유도 같은 카페 자동화에 바로 연결됩니다."
+            },
+            {
+              "keyword": "n8n·Make + LLM 워크플로",
+              "why": "업무 자동화의 중심이 플로우 기반 툴과 LLM 결합으로 이동해, 인스타 반응 수집→요약→후속 메시지 발송 같은 로컬 카페 운영 자동화에 적합합니다."
+            },
+            {
+              "keyword": "AI 네이티브 개발 플랫폼",
+              "why": "처음부터 AI 중심으로 설계된 환경이 부상하면서 비개발자도 레퍼런스와 제약만 말해 인스타 자동화용 툴을 빠르게 조립할 수 있습니다."
+            },
+            {
+              "keyword": "팀 협업 바이브코딩",
+              "why": "여러 사람이 동시에 AI와 대화하며 프로젝트를 만드는 방식이 확산돼, 카페 사장·마케터·운영자가 함께 인스타 캠페인 자동화를 다듬기 좋습니다."
+            },
+            {
+              "keyword": "로우코드/노코드 + 바이브코딩 융합",
+              "why": "노코드 플랫폼에 바이브코딩 기능이 붙는 흐름이 강해져, 개발 지식 없이도 인스타 콘텐츠 생성·댓글 응대·리드 수집 자동화를 구성하기 쉽습니다."
+            }
+          ],
+          "sources": [
+            {
+              "title": "2026 바이브코딩 최신 트렌드 총정리 – 비개발자 시대와 보안 이슈까지",
+              "url": "https://mintorain.tistory.com/102"
+            },
+            {
+              "title": "2026 바이브 코딩과 AI 자동화 최신 트렌드 - TILNOTE",
+              "url": "https://tilnote.io/pages/696066d4d334eaa5a0ce5245"
+            },
+            {
+              "title": "\"개발자는 이제 설계자다\" 2026년 바이브 코딩이 바꾼 개발자의 현실",
+              "url": "https://softone.tistory.com/226"
+            },
+            {
+              "title": "최근 3개월 흐름으로 읽는 2026 바이브 코딩 로드맵 - 요즘IT",
+              "url": "https://yozm.wishket.com/magazine/detail/3611/"
+            },
+            {
+              "title": "2026 바이브코딩 통계: AI 코딩 시장 47억 달러, 채택률 92% - DIARI",
+              "url": "https://diari.cloud/blog/vibe-coding-statistics-report-2026"
+            },
+            {
+              "title": "AI로 코딩하는 새 패러다임·도구 5가지·실전 워크플로우 완전 정복",
+              "url": "https://knightk.tistory.com/450"
+            },
+            {
+              "title": "2026 바이브코딩 마스터 (구름 / 40H) - 넥스트플랫폼",
+              "url": "https://nextplatform.net/vibe-coding-master-2026/"
+            },
+            {
+              "title": "[2026 트렌드] 1인 창업자가 개발자 없이 앱 출시? 바이브 코딩 10분 만 ...",
+              "url": "https://lone-m.tistory.com/entry/2026-%ED%8A%B8%EB%A0%8C%EB%93%9C-1%EC%9D%B8-%EC%B0%BD%EC%97%85%EC%9E%90%EA%B0%80-%EA%B0%9C%EB%B0%9C%EC%9E%90-%EC%97%86%EC%9D%B4-%EC%95%B1-%EC%B6%9C%EC%8B%9C-%EB%B0%94%EC%9D%B4%EB%B8%8C-%EC%BD%94%EB%94%A9-10%EB%B6%84-%EB%A7%8C%EC%97%90-%EC%9D%B4%ED%95%B4%ED%95%98%EA%B8%B0-feat-%EC%88%98%EC%B2%9C%EB%A7%8C%EC%9B%90-%EC%A0%88%EC%95%BD"
+            }
+          ]
+        },
+        "keywords": [
+          "AI 동네 카페 마케팅",
+          "인스타 자동화 카페",
+          "AI 단골 확보",
+          "카페 인스타 DM 자동화",
+          "로컬 비즈니스 AI"
+        ],
+        "hooks": [
+          "AI로 동네 카페 단골 3배 늘리는 인스타 자동화 비법 공개!",
+          "\"사장님, DM 답장 3초면 끝나요!\" AI로 인스타 마케팅 자동화하는 법",
+          "이 AI 툴 하나로 동네 카페 인스타, 예약 폭주하게 만드는 방법"
+        ],
+        "title": "AI로 동네 카페 단골 만드는 인스타 자동화 비법",
+        "script": "동네 카페 사장님들, 인스타그램 마케팅 때문에 밤새 DM 답장하고 계신가요? 이제 AI로 해결하세요! 이 영상 끝까지 보시면, AI가 여러분의 인스타를 24시간 열일하는 단골 제조기로 만들어 드립니다. 첫 3초 안에 답장하는 AI 챗봇, 예약 폭주시키는 자동화 툴까지, AI 동네 카페 마케팅의 모든 것을 알려드릴게요. \"AI 동네 카페 마케팅\", \"인스타 자동화 카페\", \"AI 단골 확보\" 키워드로 검색해서 막막했던 인스타 운영, 이제 AI에게 맡기고 여러분은 손님 맞을 준비만 하세요! 지금 바로 시청하시고, 우리 카페 인스타를 DM 답장 3초 컷, 예약 폭주로 바꿔보세요!",
+        "storyboard": [
+          "장면 1: 밤늦게 카페에서 지친 사장님이 스마트폰으로 인스타그램 DM을 확인하며 한숨 쉬는 모습.",
+          "장면 2: 화면 전환 - 'AI로 동네 카페 단골 3배 늘리는 인스타 자동화 비법!' 텍스트 오버레이와 함께 밝고 활기찬 느낌의 카페 내부.",
+          "장면 3: AI 챗봇이 실시간으로 고객 문의에 답장하는 화면 캡처 또는 시뮬레이션.",
+          "장면 4: 예약 시스템이 자동으로 예약 문의를 처리하고 예약이 차는 모습.",
+          "장면 5: \"사장님, DM 답장 3초면 끝나요!\" 텍스트와 함께 AI 솔루션 아이콘 등장.",
+          "장면 6: \"이 AI 툴 하나로 동네 카페 인스타, 예약 폭주하게 만드는 방법\" 텍스트 강조.",
+          "장면 7: 'AI 동네 카페 마케팅', '인스타 자동화 카페', 'AI 단골 확보', '카페 인스타 DM 자동화', '로컬 비즈니스 AI' 키워드 나열.",
+          "장면 8: 최종 CTA - \"지금 바로 시청하시고, 우리 카페 인스타를 DM 답장 3초 컷, 예약 폭주로 바꿔보세요!\" 텍스트와 함께 구독, 좋아요 버튼 애니메이션."
+        ],
+        "thumbnail_prompt": "A close-up shot of a friendly-looking cafe owner smiling brightly while holding a smartphone displaying a notification of multiple new Instagram messages. In the background, the cafe is bustling with happy customers. Overlay text in a clear, eye-catching font reads: \"AI로 인스타 단골 3배!\"",
+        "hashtags": [
+          "#AI동네카페마케팅",
+          "#인스타자동화카페",
+          "#AI단골확보",
+          "#카페인스타DM자동화",
+          "#로컬비즈니스AI",
+          "#카페마케팅"
+        ],
+        "originality": {
+          "max_similarity": 0.0937,
+          "most_similar_to": 0,
+          "is_original": true
+        },
+        "channel_dup": {
+          "max_jaccard": 0.25,
+          "most_similar_title": "비개발자가 바이브코딩 과외받고 AI 서비스 MVP 만드는 전 과정 공개",
+          "is_distinct": true
+        }
+      },
+      "wiki_references": [],
+      "feedback_log": [],
+      "token_usage": {
+        "prompt": 16916,
+        "completion": 1831,
+        "total": 18749,
+        "calls": 4
+      },
+      "cost_krw": 11.9455
+    },
+    {
+      "task_id": "CONTENT_2026_009",
+      "topic": "비개발자가 AI로 사장님 가게 리뷰 자동 응대 만들기",
+      "source_agent": "supervisor",
+      "target_agent": "trend-analyst",
+      "status": "approved",
+      "retry_count": 0,
+      "content_payload": {
+        "live_trends": {
+          "trends": [
+            {
+              "keyword": "바이브 코딩",
+              "why": "최근 3개월 흐름을 다룬 기사와 교육 공고에서 자연어 프롬프트로 앱·서비스를 만드는 방식이 실무와 창업 맥락에서 반복적으로 언급됐다.[4][5][7]"
+            },
+            {
+              "keyword": "노코드 AI 업무 자동화",
+              "why": "노코드로 AI 시스템 구축·업무 자동화·데이터 관리를 하는 흐름이 국내 글과 교육에서 확인되며, 비개발자도 직접 AI 서비스를 구현하는 사례로 연결된다.[3][7]"
+            },
+            {
+              "keyword": "비개발자 1인 AI 창업",
+              "why": "바이브 코딩이 스타트업·소상공인·비개발자 중심 시장에서 빠르게 확산된다고 보도되었고, 1인 창업 사례도 화제로 다뤄졌다.[2][4]"
+            },
+            {
+              "keyword": "AI 리뷰 자동응대",
+              "why": "제공된 검색결과에는 사장님 가게 리뷰 자동 응대 자체를 직접 다룬 근거는 없지만, 비개발자가 AI를 활용해 업무형 앱과 자동화 도구를 만드는 노코드/바이브 코딩 흐름과 가장 가까운 응용 주제로 연결된다.[1][3]"
+            }
+          ],
+          "sources": [
+            {
+              "title": "코딩할 줄 몰라도 다 된다... AI가 연 '바이브 코딩'과 로우코드/노코드 ...",
+              "url": "https://www.youtube.com/watch?v=1kPVTY0M4hE"
+            },
+            {
+              "title": "혼자 만든 AI 코딩툴, 6개월 만에 1천억원에 팔렸다…'바이브코딩'이 ...",
+              "url": "https://v.daum.net/v/20250620090911180"
+            },
+            {
+              "title": "노코드가 만든 '코드 없는 혁신의 시대' - 이랜서",
+              "url": "https://www.elancer.co.kr/blog/detail/918"
+            },
+            {
+              "title": "최근 3개월 흐름으로 읽는 2026 바이브 코딩 로드맵 - 요즘IT",
+              "url": "https://yozm.wishket.com/magazine/detail/3611/"
+            },
+            {
+              "title": "[PDF] 바이브 코딩의 현황과 미래상 제시",
+              "url": "https://www.iafctech.co.kr/?act=common.download_act&file_path=BmMHPg9hAyIANAAtAXsDdwVhVWJXCF5oAHpQNFVhCR5RA1MyXRgCY1c3BzNSbAdvBU5aFVEeVysFaQM9BkpVdAZUByAPZQMpADQAdgFLA0YFd1U%2BVx5eDwAhUG9VNwkzUSdTdl1lAiZXYAczUm0HKwU3WmpRZFdkBQkDZgZMVU4GQwcYD08DKQA3AGwBRwN7BU9VPVcUXjEAJlBtVRwJBVEkU3ZdZQIFV3MHbVIpB14FcFo1UWdXFgUhAyQGSVVFBnUHPA9vA2MAJABoATwDbAVyVSBXHl4fACZQb1VjCRxRJlNdXSgCGFdwB0hSMQdTBXRaE1EFVxcFYQN%2FBnVVZQZn&bbs_seq=ADIHZlxj"
+            },
+            {
+              "title": "투자자가 바이브 코딩으로 서비스를 만든 이유 - kakaoventures blog",
+              "url": "https://www.kakao.vc/blog/vibe-coding-in-vc"
+            },
+            {
+              "title": "2026년 바이브 코딩(노코드)을 활용한 AI 업무 서비스 개발 과정 교육",
+              "url": "https://bizinfo.go.kr/sie/siea/selectSIEA430Detail.do?eventInfoId=EVEN_000000000068302"
+            }
+          ]
+        },
+        "keywords": [
+          "AI 리뷰 자동 응대",
+          "비개발자 AI 창업",
+          "노코드 AI 자동화",
+          "사장님 가게 리뷰",
+          "AI 챗봇 솔루션"
+        ],
+        "hooks": [
+          "사장님, 리뷰에 답 안 하면 월 100만원 손해 보는 거 아셨나요?",
+          "AI가 사장님 가게 리뷰를 3초 만에 자동 응대해 준다고?",
+          "매출 2배 올린 사장님들의 비밀? AI 리뷰 자동 응대 시스템!"
+        ],
+        "title": "비개발자가 AI로 사장님 가게 리뷰 자동 응대 만들기",
+        "script": "사장님, 가게 리뷰에 답 안 하면 월 100만원 손해 보는 거 아셨나요? AI가 사장님 가게 리뷰를 3초 만에 자동 응대해 준다고요? 매번 밀리는 리뷰 답장, 이제 AI에게 맡기세요! 비개발자도 노코드로 AI 챗봇 솔루션을 만들어 사장님 가게 리뷰를 3초 만에 자동 응대하고, 고객 만족도를 높여 매출까지 올릴 수 있습니다. AI 리뷰 자동 응대 시스템으로 사장님의 소중한 시간을 절약하고, 단골 고객을 더 많이 만들어보세요! 더 궁금하신 점은 댓글로 남겨주세요.",
+        "storyboard": [
+          "영상 시작: '사장님, 리뷰 답장 안 하면 월 100만원 손해?' 라는 텍스트와 함께 불안한 표정의 사장님 클로즈업",
+          "AI가 3초 만에 리뷰에 답하는 장면을 빠르게 보여줌 (애니메이션 또는 그래픽)",
+          "비개발자도 쉽게 AI 챗봇을 만드는 노코드 화면을 보여줌 (간단한 드래그 앤 드롭)",
+          "자동 응대된 리뷰 덕분에 고객 만족도가 높아지고, 매출이 오르는 그래프 또는 긍정적인 피드백 텍스트를 보여줌",
+          "AI 리뷰 자동 응대 시스템으로 시간 절약 및 단골 고객 증가 효과를 강조하는 텍스트 오버레이",
+          "마지막 화면: 'AI 리뷰 자동 응대, 더 궁금하신 점은 댓글로!' 라는 CTA와 함께 채널 로고"
+        ],
+        "thumbnail_prompt": "A split image. On the left, a stressed-looking small business owner looking at a pile of unread reviews, with a '-₩1,000,000' text overlay. On the right, a bright, AI-powered chatbot icon smoothly responding to a positive customer review, with a '3 Sec Reply' badge. The overall tone is hopeful and solution-oriented, with vibrant colors.",
+        "hashtags": [
+          "#AI리뷰자동응대",
+          "#비개발자AI창업",
+          "#노코드AI",
+          "#사장님가게",
+          "#AI챗봇솔루션"
+        ],
+        "originality": {
+          "max_similarity": 0.2026,
+          "most_similar_to": 3,
+          "is_original": true
+        },
+        "channel_dup": {
+          "max_jaccard": 0.25,
+          "most_similar_title": "AI 직원 만들기) PD 지원자에게 내준 과제 나도 해보기",
+          "is_distinct": true
+        },
+        "density": {
+          "hook_syllables": 22,
+          "hook_ok": false,
+          "script_syllables": 170,
+          "density_ok": true
+        },
+        "hashtag_check": {
+          "count": 5,
+          "ok": true
+        },
+        "overclaim": {
+          "ok": true,
+          "flags": []
+        },
+        "numeric_claims": [
+          "100만원"
+        ]
+      },
+      "wiki_references": [],
+      "feedback_log": [],
+      "token_usage": {
+        "prompt": 25744,
+        "completion": 1737,
+        "total": 27481,
+        "calls": 4
+      },
+      "cost_krw": 13.3091
+    }
+  ]
+}

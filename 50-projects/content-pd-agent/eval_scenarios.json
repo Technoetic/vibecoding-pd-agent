@@ -1,0 +1,87 @@
+{
+  "_comment": "Reviewer 에이전트가 Creator 초안을 검수하는 정량 기준. 모든 assert를 Pass해야 approved.",
+  "version": 1,
+  "platform": "shorts",
+  "asserts": [
+    {
+      "metric": "length_bounds",
+      "rule": "스크립트 총 단어 수 100 이상 250 이하",
+      "min_words": 100,
+      "max_words": 250,
+      "on_fail": "길이 초과/미달 명시하여 Creator에게 축약/확장 명령"
+    },
+    {
+      "metric": "keyword_inclusion",
+      "rule": "타겟 키워드 배열 중 80% 이상 본문에 자연스럽게 포함",
+      "min_ratio": 0.8,
+      "on_fail": "누락 키워드 리스트를 반환하여 삽입 강제"
+    },
+    {
+      "metric": "originality_check",
+      "rule": "기존 output 스크립트와 최대 유사도 0.85 미만 (표절 방지). 메인이 difflib.SequenceMatcher로 결정론 계산해 주입 — Reviewer는 추측 금지, 주입된 실측값 사용",
+      "max_similarity": 0.85,
+      "implementation": "orchestrator.originality_score() — 결정론, 의존성 0. 임계 초과 시 메인이 강제 rejected",
+      "on_fail": "기존 콘텐츠와 너무 유사함. 새 앵글 적용 요망"
+    },
+    {
+      "metric": "channel_dup_check",
+      "rule": "양실장 채널 기존 73개 영상 제목과 최대 토큰 자카드 0.6 미만 (채널 중복 방지). 메인이 title_overlap_score로 결정론 계산해 주입 — Reviewer는 추측 금지",
+      "max_jaccard": 0.6,
+      "source": "channel_catalog.json",
+      "implementation": "orchestrator.title_overlap_score() — 결정론, 의존성 0. 임계 초과 시 메인이 강제 rejected",
+      "on_fail": "채널에 이미 있는 주제. 채널이 안 다룬 새 앵글로 재작성 요망"
+    },
+    {
+      "metric": "format_compliance",
+      "rule": "제목/본문/해시태그 블록이 마크다운 양식대로 분리",
+      "required_blocks": ["title", "body", "hashtags"],
+      "on_fail": "파서 에러. 템플릿 양식 재안내"
+    },
+    {
+      "metric": "security_check",
+      "rule": "실제 고객 데이터·이메일 미포함. 가상 데이터는 faker 더미만",
+      "forbidden_patterns": ["real_email", "production_db", "customer_pii"],
+      "on_fail": "보안 위반. faker 더미로 교체 강제"
+    },
+    {
+      "metric": "income_claim_compliance",
+      "rule": "수익 보장·과장 클레임 금지(미 FTC + 한국 표시광고법 거짓·과장 규제). '무조건/보장/누구나 N원' 단정 없이 가능성·사례한정·면책으로. 광고·협찬은 명확 표시(한국 추천보증 심사지침, 뒷광고 금지)",
+      "evidence": "20-knowledge/trends/수익 강조 콘텐츠 법적 신뢰 리스크.md",
+      "on_fail": "수익 단정 표현을 가능성 프레이밍으로 수정 강제. 결과는 사람마다 다름 명시"
+    },
+    {
+      "metric": "hook_concreteness_context",
+      "rule": "훅의 수익 숫자가 차별화에 기여하는가. 수익 숫자로 포화된 흔한 앵글이면 역효과(구체성 역U자) — 새 앵글/차별화 요소 필요. 한국 AI교육 니치 3대 훅(수익수치형·초단기시간형·정체성형) 중 수익수치형은 포화이므로, 정체성형(비개발자 호명) + 반전 앵글 우선",
+      "evidence": "20-knowledge/hooks/훅 구체성 역U자 법칙.md (3대 패턴: 20-knowledge/trends/한국 AI 교육 유튜브 시장 구조.md)",
+      "on_fail": "숫자 나열 대신 차별화 앵글로 재설계. 첫 3초 질문형/결과선공개/카운트다운 중 택1. 정체성형 훅 우선"
+    },
+    {
+      "metric": "retention_design",
+      "rule": "완주율(1순위 알고리즘 신호)을 위한 설계가 있는가. ① 첫 3초 훅 ② 가치 우선(결론 숨기지 말고 초반에 핵심 투척) ③ 본문 10~15초마다 정보 사다리(새 정보·반전) ④ 마지막 CTA. 60초 기준 시간비율 훅5/본문50/CTA5초 권장(검증된 정량 구조)",
+      "evidence": "20-knowledge/scripts/쇼츠 스크립트 구조와 길이.md",
+      "on_fail": "훅·가치우선·정보사다리·CTA 중 누락분 보강 지시. 결론 끝까지 숨기는 구조는 가치우선으로 재설계"
+    },
+    {
+      "metric": "korean_syllable_density",
+      "rule": "한국어 음절 밀도 검증(WPM 1:1 전이 금지). 스크립트는 음절 기준으로 인지부하 안정 범위 내. 60초≈350~400음절·600음절 초과 금지. 3초 훅은 18~21음절 이내(초당 7음절 한계). 메인이 한글 음절수 결정론 계산해 주입 — Reviewer는 추측 금지",
+      "max_hook_syllables": 21,
+      "max_script_syllables_per_min": 600,
+      "evidence": "20-knowledge/scripts/쇼츠 스크립트 구조와 길이.md (한국언어청각임상학회지 356 SPM)",
+      "on_fail": "훅 21음절 초과 시 축약. 본문 음절 과다 시 여백 확보(쉼표·시각전환)로 밀도 조절"
+    },
+    {
+      "metric": "hashtag_count",
+      "rule": "해시태그 개수 1~5개(1~2개 최적, 5개 상한). #fyp·#viral 등 광범위 태그 배제, 본문과 일치하는 니치 태그를 캡션 배치. 메인이 개수 결정론 계산해 주입",
+      "min_hashtags": 1,
+      "max_hashtags": 5,
+      "evidence": "20-knowledge/scripts/쇼츠 스크립트 구조와 길이.md (Metricool 231만건 분석)",
+      "on_fail": "5개 초과 시 니치 태그 중심으로 축소. 광범위 태그(#fyp 등) 제거"
+    },
+    {
+      "metric": "factual_accuracy",
+      "rule": "교육 채널 신뢰 보호 — 사실 오류·과장 단정 금지. 메인이 overclaim_check로 '100% 대체·무조건·누구나 보장·완전 자동화' 등 패턴을 결정론 탐지해 주입. 수치 주장(구독자·조회수 등)은 numeric_claims로 추출 — Reviewer는 채널 실제값(channel_catalog)·일반 상식과 대조해 허위·과장이면 rejected. 추측 금지, 주입된 flags 사용",
+      "evidence": "20-knowledge/trends/수익 강조 콘텐츠 법적 신뢰 리스크.md",
+      "on_fail": "과장 단정을 가능성·사례한정으로 수정. 검증 안 된 수치는 제거 또는 출처 명시"
+    }
+  ]
+}
