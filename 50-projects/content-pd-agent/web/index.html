@@ -18,10 +18,48 @@
   button:disabled { opacity:.5; cursor:wait; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
   .chip { background:#21262d; border:1px solid var(--bd); border-radius:16px; padding:4px 12px; font-size:13px; color:var(--mut); cursor:pointer; }
-  .step { display:flex; align-items:center; gap:10px; padding:6px 0; color:var(--mut); }
+  .step { display:flex; align-items:center; gap:10px; padding:7px 0; color:var(--mut); transition:color .25s; }
   .step.active { color:var(--fg); } .step.done { color:var(--ok); }
-  .dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--bd); flex:none; }
-  .step.active .dot { border-color:var(--ac); } .step.done .dot { background:var(--ok); border-color:var(--ok); }
+  .dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--bd); flex:none; position:relative; transition:all .25s; }
+  .step.done .dot { background:var(--ok); border-color:var(--ok); }
+  /* 진행 중: 회전 스피너 + 맥동 */
+  .step.active .dot { border-color:var(--ac); border-top-color:transparent; animation:spin .7s linear infinite; }
+  .step.active { animation:breathe 1.6s ease-in-out infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes breathe { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+  .step.done .dot::after { content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:700; }
+  .step .lbl { transition:color .25s; }
+  .step .meta { margin-left:auto; font-size:12px; color:var(--mut); font-variant-numeric:tabular-nums; }
+  .step.active .meta { color:var(--ac); }
+  .step.done .meta { color:var(--ok); }
+  /* 완료 체크 pop 전환 */
+  .step.done .dot { animation:dotpop .3s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes dotpop { 0%{transform:scale(.5);} 60%{transform:scale(1.15);} 100%{transform:scale(1);} }
+  /* 메타 갱신 점멸(reviewer N/N 증가 체감) */
+  .meta.bump { animation:metabump .3s ease; }
+  @keyframes metabump { 0%{transform:scale(1.18); color:var(--ac);} 100%{transform:scale(1);} }
+  /* 상단 전체 진행 바 + 경과시간 */
+  .pbar-wrap { margin-bottom:14px; }
+  .pbar-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--mut); margin-bottom:6px; }
+  .pbar { height:6px; background:#0d1117; border-radius:99px; overflow:hidden; }
+  /* 진행바 shimmer — '살아있는 흐름'(background-position만, width 무관 = 가짜 진행 아님) */
+  .pbar > i { display:block; height:100%; width:0; border-radius:99px; transition:width .5s ease;
+    background:linear-gradient(90deg,var(--ac),var(--ok)); background-size:200% 100%; animation:flow 1.4s linear infinite; }
+  @keyframes flow { 0%{background-position:200% 0;} 100%{background-position:0 0;} }
+  .pbar.stopped > i { animation:none; }
+  /* 종료 색 신호(라벨 텍스트와 병행 — 색각이상 대비) */
+  .pbar > i.is-done      { background:linear-gradient(90deg,var(--ac),var(--ok)); }
+  .pbar > i.is-escalated { background:linear-gradient(90deg,var(--ac),var(--no)); }
+  .pbar > i.is-error     { background:var(--no); }
+  .elapsed { font-variant-numeric:tabular-nums; color:var(--ac); font-weight:600; }
+  .hint { font-size:12px; color:var(--mut); margin-top:8px; }
+  .chip:hover { border-color:var(--ac); color:var(--fg); }
+  .chip.ghost { color:var(--mut); border-style:dashed; cursor:default; }
+  /* 접근성: 모션 최소화 선호 시 애니메이션 차단 */
+  @media (prefers-reduced-motion: reduce) {
+    .step.active .dot, .step.active, .pbar > i, .step.done .dot, .meta.bump { animation:none !important; }
+    .pbar > i { transition:none; }
+  }
   .trend { font-size:13px; padding:8px 0; border-bottom:1px solid var(--bd); }
   .trend b { color:var(--ac); } .trend a { color:var(--mut); font-size:12px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -49,7 +87,16 @@
   </div>
 
   <div class="card hidden" id="progress">
-    <div id="steps"></div>
+    <div class="pbar-wrap">
+      <div class="pbar-head">
+        <span id="pbarLabel">파이프라인 실행 중…</span>
+        <span class="elapsed" id="elapsed">0.0초</span>
+      </div>
+      <div class="pbar"><i id="pbarFill"></i></div>
+    </div>
+    <div id="steps" role="list" aria-live="polite"></div>
+    <div id="statusBanner" class="hint hidden" role="status" aria-live="polite"></div>
+    <div class="hint">실시간 트렌드 조사(Sonar 웹검색) + 4-에이전트 LLM 호출 + Eval 12종 검수가 직렬로 돌아 보통 <b>1~3분</b> 걸립니다. 검수 미달 시 자동 반려·재작성합니다.</div>
   </div>
 
   <div class="card hidden" id="trendPanel">
@@ -65,7 +112,7 @@
   </div>
 
   <div class="card hidden" id="evalPanel">
-    <b>✅ 검수표 (Eval 8종 + 채널 중복)</b>
+    <b>✅ 검수표 (Eval 12종)</b> <span class="muted" id="evalCount"></span>
     <table id="evalTable"><tbody></tbody></table>
   </div>
 
@@ -75,7 +122,7 @@
       <div class="a"><b>Supervisor</b><br>주제 분해·라우팅 (창작 안 함)</div>
       <div class="a"><b>Trend Analyst</b> · temp 0.8<br>채널주제+Sonar 트렌드→키워드·3초훅</div>
       <div class="a"><b>Creator</b> · temp 0.8<br>스크립트·스토리보드·썸네일</div>
-      <div class="a"><b>Reviewer</b> · temp 0.2<br>Eval 8종+채널중복 판정</div>
+      <div class="a"><b>Reviewer</b> · temp 0.2<br>Eval 12종 판정(결정론+LLM)</div>
     </div>
     <p class="muted" style="margin-top:12px">
       flash-lite 단일모델(호출당 ~0.05원) · originality·채널중복 코드 실측 주입(LLM 추측 아님) ·
@@ -86,69 +133,260 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const STEPS = [["supervisor","Supervisor"],["trend-live","트렌드 조사"],["trend-analyst","Trend Analyst"],["creator","Creator"],["reviewer","Reviewer"]];
-const SAMPLE_CHIPS = ["AI로 사장님 매출 올리는 법","비개발자가 알아야 할 백엔드 한 가지","노코드로 만드는 첫 자동화"];
 
-function renderChips(){ $("#chips").innerHTML = SAMPLE_CHIPS.map(c=>`<span class="chip">${c}</span>`).join("");
-  document.querySelectorAll(".chip").forEach(el=>el.onclick=()=>{ $("#topic").value=el.textContent; }); }
-function renderSteps(){ $("#steps").innerHTML = STEPS.map(([k,l])=>`<div class="step" data-k="${k}"><span class="dot"></span>${l}</div>`).join(""); }
-function setStep(k, state){ const el=$(`.step[data-k="${k}"]`); if(el){ el.classList.remove("active","done"); el.classList.add(state);} }
+// 단계 정의 + 가중치(실제 소요 반영: reviewer 12콜 최장 3, creator 1.5, trend-live Sonar 1.2, 단발 1).
+const STEPS = [
+  ["supervisor",    "Supervisor",    1.0],
+  ["trend-live",    "트렌드 조사",    1.2],
+  ["trend-analyst", "Trend Analyst", 1.0],
+  ["creator",       "Creator",       1.5],
+  ["reviewer",      "Reviewer",      3.0],
+];
+const STEP_TOTAL = STEPS.reduce((a,[,,w])=>a+w, 0);
+const EXPECTED_METRICS = 12;   // 표시 힌트(분모)로만. 진행바 충전엔 실측 seen 사용.
+const STEP_BASE = (()=>{ let acc=0, m={}; for(const [k,,w] of STEPS){ m[k]=acc/STEP_TOTAL*100; acc+=w; } m.__end=100; return m; })();
+const STEP_SPAN = Object.fromEntries(STEPS.map(([k,,w])=>[k, w/STEP_TOTAL*100]));
+
+let P = null;            // 실행당 상태(run()에서 newRun으로 리셋)
+let timer = null;        // setInterval 핸들 — 전역 단 1개
+let samplesCache = null;
+
+function newRun(){
+  return { t0: performance.now(), active:null, reviewSeen:0, reviewPass:0, retry:0, evalRows:{}, ended:false, barPct:0 };
+}
+
+const esc = t => { const e=document.createElement("div"); e.textContent = (t==null?"":t); return e.innerHTML; };
+function fmt(x){ return (typeof x==="number") ? x.toFixed(2) : (x==null ? "-" : String(x)); }
+
+// ── 타이머: 경과시간 텍스트만 갱신(진행바 width 절대 안 건드림) ──
+function startTimer(){ stopTimer(); timer=setInterval(tickElapsed,100); tickElapsed(); }
+function stopTimer(){ if(timer){ clearInterval(timer); timer=null; } }
+function tickElapsed(){ if(!P) return; $("#elapsed").textContent = ((performance.now()-P.t0)/1000).toFixed(1)+"초"; }
+
+// ── 진행바: 오직 이벤트로만 전진(시간 무관). 단조증가 강제(retry만 예외) ──
+function setProgress(pct, opts){
+  pct = Math.max(0, Math.min(100, pct));
+  if(!(opts && opts.allowRewind)) pct = Math.max(pct, P.barPct);
+  P.barPct = pct;
+  $("#pbarFill").style.width = pct.toFixed(2)+"%";
+}
+function enterStageBar(k){ setProgress(STEP_BASE[k]); }
+function setReviewBar(){
+  const denom = Math.max(EXPECTED_METRICS, P.reviewSeen, 1);
+  const frac = Math.min(P.reviewSeen/denom, 1);
+  setProgress(STEP_BASE.reviewer + STEP_SPAN.reviewer*frac*0.92);   // 92%까지만(8%는 done 점프용)
+}
+
+// ── 단계 상태: setStep(key) 단일 함수가 active≤1 불변식 강제(동시-active 구조적 차단) ──
+function setStep(key){
+  if(P.active===key) return;             // no-op 가드(같은 단계 재호출 시 애니 재점화 방지)
+  P.active = key;
+  let passed = true;
+  for(const [k] of STEPS){
+    const el = $(`.step[data-k="${k}"]`); if(!el) continue;
+    const want = (k===key) ? "active" : (passed ? "done" : "");
+    if(k===key) passed = false;
+    const isActive = el.classList.contains("active"), isDone = el.classList.contains("done");
+    if(want==="active"){ if(!isActive){ el.classList.remove("done"); el.classList.add("active"); } }
+    else if(want==="done"){ if(!isDone){ el.classList.remove("active"); el.classList.add("done"); } }
+    else { el.classList.remove("active","done"); }
+  }
+}
+function allDone(){ P.active=null; for(const [k] of STEPS){ const el=$(`.step[data-k="${k}"]`); if(el){ el.classList.remove("active"); el.classList.add("done"); } } }
+function clearActive(){ P.active=null; for(const [k] of STEPS){ const el=$(`.step[data-k="${k}"]`); if(el) el.classList.remove("active"); } }  // error 전용: done 승격 금지
+
+function setMeta(key, text){ const el=$(`.meta[data-meta="${key}"]`); if(!el) return; el.textContent=text; el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+function setLabel(text){ $("#pbarLabel").textContent = text; }
+function banner(text){ const b=$("#statusBanner"); if(!text){ b.classList.add("hidden"); b.textContent=""; return; } b.textContent=text; b.classList.remove("hidden"); }
+
+// ── 칩 동적 로딩(/api/samples 실제 기획안 title — 하드코딩 0) ──
+async function getSamples(){
+  if(Array.isArray(samplesCache)) return samplesCache;
+  try { const r = await fetch("/api/samples"); if(r.ok){ const j = await r.json(); if(Array.isArray(j) && j.length){ samplesCache=j; return j; } } } catch(e){}
+  return [];   // 실패/빈 → 캐시 안 함(일시실패 영구고착 방지, 다음 호출 재시도 가능)
+}
+async function renderChips(){
+  const box = $("#chips");
+  box.innerHTML = '<span class="chip ghost">샘플 불러오는 중…</span>';
+  const s = await getSamples();
+  box.innerHTML = "";
+  if(!s.length) return;   // 하드코딩 폴백 없음
+  const seen = new Set();
+  s.map(x=>x.title).filter(t=>t && !seen.has(t) && seen.add(t)).slice(0,8).forEach(t=>{
+    const el = document.createElement("span"); el.className="chip"; el.textContent=t;   // textContent → XSS 차단
+    el.onclick = ()=>{ $("#topic").value=t; $("#topic").focus(); };
+    box.appendChild(el);
+  });
+}
+
+function renderSteps(){
+  $("#steps").innerHTML = STEPS.map(([k,l])=>
+    `<div class="step" data-k="${k}" role="listitem"><span class="dot"></span><span class="lbl">${esc(l)}</span><span class="meta" data-meta="${k}"></span></div>`
+  ).join("");
+}
+function renderTrends(d){
+  if(!(d.trends && d.trends.length)) return;
+  $("#trendPanel").classList.remove("hidden");
+  $("#trends").innerHTML =
+    d.trends.map(t=>`<div class="trend"><b>${esc(t.keyword)}</b> — ${esc(t.why)}</div>`).join("") +
+    (d.sources && d.sources.length
+      ? `<div class="trend">출처: ${d.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>`).join(" · ")}</div>` : "");
+}
+function renderResult(kind, d){
+  const p = d.payload || {};
+  $("#result").classList.remove("hidden");
+  $("#rTitle").textContent = d.title || p.title || "";
+  $("#rScript").textContent = p.script || "";
+  $("#rTags").textContent = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : (p.hashtags || "");  // done.payload.hashtags=배열
+  $("#rCost").textContent = `비용 ${d.cost_krw}원 · 토큰 ${(d.token_usage||{}).total||0} · ${kind==="escalated"?"검수 미달(반려)":"승인"}`;
+}
+async function renderFallbackSamples(){   // error 폴백. server.py /api/samples hashtags=문자열 → join 안 함
+  const s = await getSamples();
+  if(!s.length) return;
+  $("#result").classList.remove("hidden");
+  $("#rTitle").textContent = "[샘플] " + (s[0].title||"");
+  $("#rScript").textContent = s[0].script || "";
+  $("#rTags").textContent = s[0].hashtags || "";
+  $("#rCost").textContent = `사전 생성 샘플 ${s.length}건 · API 키 없거나 오류 시 폴백`;
+}
+
+function resetReview(){ P.reviewSeen=0; P.reviewPass=0; P.evalRows={}; $("#evalTable tbody").innerHTML=""; $("#evalCount").textContent=""; setMeta("reviewer",""); }
+
+// ── 종료/에러 단일 경로(멱등) ──
+function finish(kind, d){
+  if(!P || P.ended) return;
+  P.ended = true;
+  stopTimer();
+  banner("");
+  $(".pbar").classList.add("stopped");
+  const fill = $("#pbarFill");
+  fill.classList.remove("is-done","is-escalated","is-error");
+
+  if(kind==="error"){
+    clearActive();                 // active만 해제(done 승격 금지 — 어디서 죽었는지 보존)
+    fill.classList.add("is-error");
+    // 폭 동결(100% 강제 금지). 멈춘 자리에서 빨강.
+    setLabel("중단됨: " + (d.reason || "알 수 없는 오류"));
+    renderFallbackSamples();
+    $("#go").disabled = false;
+    return;
+  }
+  allDone();
+  setProgress(100, {allowRewind:true});
+  fill.classList.add(kind==="escalated" ? "is-escalated" : "is-done");
+  setLabel(kind==="escalated" ? `검수 미달 — 에스컬레이션 (재시도 ${d.max_retries}회 초과)` : "완료 ✓");
+  renderResult(kind, d);
+  $("#go").disabled = false;
+}
+
+// ── SSE stage 분기(server.py event명 의존 안 함, d.stage 기준) ──
+function handle(ev, d){
+  if(P.ended) return;   // 종료 후 잔여 이벤트 무조건 차단
+  const s = d.stage;
+  switch(s){
+    case "queued":
+      setLabel("대기 중 — 앞선 기획 처리 중");
+      banner("앞선 요청을 처리 중입니다. 대기열에서 곧 시작합니다…");
+      break;
+    case "supervisor":
+      banner(""); setLabel("주제 분해 중…");
+      setStep("supervisor"); enterStageBar("supervisor"); setMeta("supervisor","주제 분해");
+      break;
+    case "trend-live":
+      setLabel("실시간 트렌드 조사 중(Sonar)…");
+      setStep("trend-live"); enterStageBar("trend-live"); renderTrends(d);
+      setMeta("trend-live", `트렌드 ${(d.trends||[]).length}건`);
+      break;
+    case "trend-analyst":
+      setLabel("키워드·3초 훅 설계 중…");
+      setStep("trend-analyst"); enterStageBar("trend-analyst");
+      setMeta("trend-analyst", `키워드 ${(d.keywords||[]).length}·훅 ${(d.hooks||[]).length}`);
+      break;
+    case "creator":
+      P.retry = d.retry || 0;       // 현재 회차(0부터) — 단일 진실
+      resetReview();                // 새 루프: reviewer 카운터·표 초기화
+      setStep("creator"); enterStageBar("creator");
+      setLabel(P.retry>0 ? `재작성 중 (재시도 ${P.retry}회차)` : "스크립트 작성 중…");
+      setMeta("creator", P.retry>0 ? `재시도 ${P.retry}` : "초안 작성");
+      break;
+    case "originality":
+      setMeta("creator", `유사도 ${fmt(d.max_similarity)} ${d.is_original?"✓":"⚠"}`);
+      break;
+    case "channel-dup":
+      setLabel("Eval 검수 중…");
+      setStep("reviewer"); enterStageBar("reviewer");   // 여기서 reviewer 승격(creator 자동 done)
+      setMeta("reviewer", `검수 시작 (자카드 ${fmt(d.max_jaccard)})`);
+      break;
+    case "reviewer": {
+      if(P.active!=="reviewer"){ setStep("reviewer"); enterStageBar("reviewer"); }  // channel-dup 누락 방어
+      const m = d.metric;
+      if(m && !P.evalRows[m]){
+        const tr = document.createElement("tr"); P.evalRows[m]=tr; $("#evalTable tbody").appendChild(tr);
+        P.reviewSeen++; if(d.passed) P.reviewPass++;
+      } else if(m && d.passed && P.evalRows[m] && P.evalRows[m].dataset.pass!=="1"){
+        P.reviewPass++;   // 같은 metric이 통과로 바뀐 희귀 케이스(seen 불변)
+      }
+      if(m){ const tr=P.evalRows[m]; tr.dataset.pass = d.passed?"1":"0";
+        tr.innerHTML = `<td>${esc(m)}</td><td class="${d.passed?'pass':'fail'}">${d.passed?'✅':'❌'}</td><td class="muted">${esc(d.comment||'')}</td>`; }
+      $("#evalPanel").classList.remove("hidden");
+      setReviewBar();
+      setMeta("reviewer", `${P.reviewSeen}/${EXPECTED_METRICS}`);
+      $("#evalCount").textContent = `${P.reviewPass}/${P.reviewSeen} 통과`;   // 분모=실측 seen(거짓 12 금지)
+      break;
+    }
+    case "rejected":
+      P.retry = d.retry || (P.retry+1);
+      setLabel(`검수 반려 → 재작성 (재시도 ${P.retry}회차)`);
+      setMeta("reviewer", "반려");
+      setStep("creator");                                   // reviewer 즉시 idle 강등 + creator 복귀
+      setProgress(STEP_BASE.creator, {allowRewind:true});   // creator 칸 시작으로 정직하게 되감김
+      const fb = (d.feedback||[])[0];
+      banner(fb ? "반려 사유: " + String(fb).slice(0,60) : "검수 미달 — 자동 반려 후 재작성합니다.");
+      break;
+    case "done":      finish("done", d); break;
+    case "escalated": finish("escalated", d); break;
+    case "error":     finish("error", d); break;
+    default: break;   // 미지 stage 무시
+  }
+}
 
 async function run(topic){
-  $("#go").disabled=true;
+  $("#go").disabled = true;
   ["#progress","#trendPanel","#result","#evalPanel"].forEach(s=>$(s).classList.add("hidden"));
-  $("#progress").classList.remove("hidden"); renderSteps();
-  $("#evalTable").querySelector("tbody").innerHTML="";
-  const evalRows = {};
+  $("#progress").classList.remove("hidden");
+  renderSteps();
+  $("#evalTable tbody").innerHTML = ""; $("#evalCount").textContent = "";
+  banner("");
+  $(".pbar").classList.remove("stopped");
+  $("#pbarFill").className = "";          // is-* 제거
 
-  const res = await fetch("/api/pd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic})});
-  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf="";
-  while(true){
-    const {value,done} = await reader.read(); if(done) break;
-    buf += dec.decode(value,{stream:true});
-    const parts = buf.split("\n\n"); buf = parts.pop();
-    for(const p of parts){
-      const ev = (p.match(/^event: (.+)$/m)||[])[1];
-      const dm = p.match(/^data: (.+)$/m); if(!dm) continue;
-      const d = JSON.parse(dm[1]); handle(ev, d, evalRows);
-    }
-  }
-  $("#go").disabled=false;
-}
+  P = newRun();
+  setProgress(0, {allowRewind:true});
+  startTimer();
+  setLabel("연결 중…");
 
-function handle(ev, d, evalRows){
-  const stage = d.stage;
-  if(stage==="supervisor"){ setStep("supervisor","done"); setStep("trend-live","active"); }
-  else if(stage==="trend-live"){ setStep("trend-live","done"); setStep("trend-analyst","active");
-    if(d.trends && d.trends.length){ $("#trendPanel").classList.remove("hidden");
-      $("#trends").innerHTML = d.trends.map(t=>`<div class="trend"><b>${t.keyword}</b> — ${t.why}</div>`).join("") +
-        (d.sources&&d.sources.length? `<div class="trend">출처: ${d.sources.map(s=>`<a href="${s.url}" target="_blank" rel="noopener">${s.title}</a>`).join(" · ")}</div>`:""); } }
-  else if(stage==="trend-analyst"){ setStep("trend-analyst","done"); setStep("creator","active"); }
-  else if(stage==="creator"){ setStep("creator","active"); setStep("reviewer","active"); }
-  else if(stage==="reviewer"){ const tb=$("#evalTable").querySelector("tbody");
-    if(!evalRows[d.metric]){ const tr=document.createElement("tr"); evalRows[d.metric]=tr; tb.appendChild(tr); }
-    evalRows[d.metric].innerHTML = `<td>${d.metric}</td><td class="${d.passed?'pass':'fail'}">${d.passed?'✅':'❌'}</td><td class="muted">${d.comment||''}</td>`;
-    $("#evalPanel").classList.remove("hidden"); }
-  else if(stage==="done"||stage==="escalated"){ STEPS.forEach(([k])=>setStep(k,"done"));
-    const p=d.payload||{};
-    $("#result").classList.remove("hidden");
-    $("#rTitle").textContent = d.title || p.title || "";
-    $("#rScript").textContent = p.script || "";
-    $("#rTags").textContent = (p.hashtags||[]).join(" ");
-    $("#rCost").textContent = `비용 ${d.cost_krw}원 · 토큰 ${(d.token_usage||{}).total||0} · ${stage==="escalated"?"검수 미달(반려)":"승인"}`; }
-  else if(stage==="error"){ alert("에러: "+(d.reason||"unknown")); loadSamples(); }
-}
-
-async function loadSamples(){
   try {
-    const s = await (await fetch("/api/samples")).json();
-    if(!s.length) return;
-    $("#result").classList.remove("hidden");
-    $("#rTitle").textContent = "[샘플] "+s[0].title;
-    $("#rScript").textContent = s[0].script;
-    $("#rTags").textContent = s[0].hashtags;
-    $("#rCost").textContent = `사전 생성 샘플 ${s.length}건 · API 키 없거나 오류 시 폴백`;
-  } catch(e) {}
+    const res = await fetch("/api/pd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic})});
+    if(!res.ok || !res.body) throw new Error("HTTP "+res.status);
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf="";
+    while(true){
+      const {value,done} = await reader.read(); if(done) break;
+      buf += dec.decode(value,{stream:true});
+      const parts = buf.split("\n\n"); buf = parts.pop();
+      for(const p of parts){
+        const ev = (p.match(/^event: (.+)$/m)||[])[1];
+        const dm = p.match(/^data: (.+)$/m); if(!dm) continue;
+        let d; try { d = JSON.parse(dm[1]); } catch(_) { continue; }   // 깨진 1건 스킵
+        handle(ev, d);
+      }
+    }
+    if(!P.ended){ finish("error", {reason:"연결이 예기치 않게 종료되었습니다."}); }
+  } catch(e){
+    if(!P.ended) finish("error", {reason: e.message || String(e)});
+  } finally {
+    stopTimer();                          // 어떤 경로로든 타이머 누수 0(멱등)
+    $("#go").disabled = false;
+  }
 }
 
 renderChips();
