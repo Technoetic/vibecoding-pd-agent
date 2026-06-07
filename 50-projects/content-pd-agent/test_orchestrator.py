@@ -380,6 +380,65 @@ def test_fetch_live_trends_malformed_trends():
     print("PASS test_fetch_live_trends_malformed_trends")
 
 
+def test_suggest_topics_no_key():
+    """API_KEY 부재 시 빈 결과 graceful(네트워크 호출 0)."""
+    reset()
+    orc.API_KEY = ""
+    out = orc.suggest_topics(n=6)
+    assert out == {"topics": [], "trends": [], "sources": []}, out
+    print("PASS test_suggest_topics_no_key")
+
+
+def _seq_urlopen(payloads):
+    """호출 순서대로 다른 응답을 돌려주는 fake urlopen(suggest_topics는 Sonar→flash-lite 2콜)."""
+    box = {"i": 0}
+    def _fake(req, timeout=60):
+        p = payloads[min(box["i"], len(payloads)-1)]
+        box["i"] += 1
+        return FakeResp(json.dumps(p).encode("utf-8"))
+    return _fake
+
+
+def test_suggest_topics_generates():
+    """Sonar 트렌드 + flash-lite 제안 → topics 파싱(과거 산출물 아님)."""
+    reset()
+    sonar = {"choices": [{"finish_reason": "stop", "message": {
+        "content": '{"trends":[{"keyword":"AI 자동응대","why":"검색 급증"}]}',
+        "metadata": {"search_results": [{"title": "S", "url": "https://s.com"}]}}}],
+        "usage": {"cost": 5.0}}
+    flash = {"choices": [{"finish_reason": "stop", "message": {"content":
+        '{"topics":[{"title":"사장님 리뷰 AI로 5분 자동응대","why":"지금 검색 급증"},'
+        '{"title":"노코드로 만든 첫 예약봇","why":"진입장벽 0"}]}'}}],
+        "usage": {"cost": 3.0}}
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = _seq_urlopen([sonar, flash])
+    try:
+        out = orc.suggest_topics(n=6)
+    finally:
+        urllib.request.urlopen = orig
+    assert len(out["topics"]) == 2, out
+    assert out["topics"][0]["title"] == "사장님 리뷰 AI로 5분 자동응대", out
+    assert out["topics"][0]["why"], out
+    assert out["trends"] and out["sources"], out  # Sonar 결과도 함께 반환
+    print("PASS test_suggest_topics_generates")
+
+
+def test_suggest_topics_string_array():
+    """LLM이 topics를 문자열 배열로만 줘도 흡수(견고성)."""
+    reset()
+    sonar = {"choices": [{"finish_reason": "stop", "message": {"content": '{"trends":[]}'}}], "usage": {"cost": 1.0}}
+    flash = {"choices": [{"finish_reason": "stop", "message": {"content":
+        '{"topics":["주제 문자열만 옴","두번째 주제"]}'}}], "usage": {"cost": 1.0}}
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = _seq_urlopen([sonar, flash])
+    try:
+        out = orc.suggest_topics(n=6)
+    finally:
+        urllib.request.urlopen = orig
+    assert [t["title"] for t in out["topics"]] == ["주제 문자열만 옴", "두번째 주제"], out
+    print("PASS test_suggest_topics_string_array")
+
+
 def test_parse_trends_recovers_broken_json():
     """전체 JSON이 깨져도 개별 trend 객체를 정규식으로 부분 복구."""
     broken = '{"trends":[{"keyword":"AI 워크플로","why":"부상 중, 그리고 확산"} {"keyword":"명세화","why":"중심 스킬"}]'  # 쉼표 누락+미닫힘
@@ -700,6 +759,9 @@ if __name__ == "__main__":
     test_fetch_live_trends_graceful()
     test_fetch_live_trends_parses()
     test_fetch_live_trends_malformed_trends()
+    test_suggest_topics_no_key()
+    test_suggest_topics_generates()
+    test_suggest_topics_string_array()
     test_parse_trends_recovers_broken_json()
     test_parse_trends_normal()
     test_parse_json_robust()
@@ -722,4 +784,4 @@ if __name__ == "__main__":
     test_numeric_claim_extract()
     test_word_count_score()
     test_keyword_inclusion_score()
-    print("\n✅ ALL PASS (42 tests)")
+    print("\n✅ ALL PASS (45 tests)")

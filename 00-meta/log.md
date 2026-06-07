@@ -16,6 +16,8 @@ related:
 
 시계열 감사 로그. **새 항목은 항상 이 줄 바로 아래 최상단에 1줄로 추가**한다.
 
+- 2026-06-08 — 홈 화면 '동적 주제 제안' 신설: 하드코딩 칩 완전 제거 요청("동적으로 제안되게") 반영. orchestrator.suggest_topics(n) 신설(Sonar 실시간 트렌드+채널 인기주제+지식노트→flash-lite가 '지금 뜨는 쇼츠 주제' 생성, 컴플라이언스 준수, 과거 산출물 재탕 아님). server.py /api/suggest + TTL 캐시(30분, 빈결과 비캐시·refresh 우회 — 접속당 유료호출 폭주 차단). index.html renderChips를 /api/suggest 우선→/api/samples 폴백으로, 🔄새로고침 버튼·why 툴팁·출처 라벨 추가. 회귀 51 PASS(orc 45+srv 6), Playwright 실측 ok/empty 양모드 PASS(JS에러 0). → Railway 배포 동반.
+- 2026-06-08 — 웹 데모 진행 애니메이션 UX 구동(index.html): 직전 추가된 진행바·경과시간·스피너 CSS가 구동 JS 0으로 죽어있던 것을 적대적 다관점 설계(3관점→심사→합성, 12결함 회피)로 전면 구현. 칩 하드코딩 제거→/api/samples 실데이터 동적화("하드코딩 싫어" 반영), 단계 가중치 진행바(시간충전 금지=정직성)·reviewer 실측 seen/12, creator·reviewer 동시-active 버그 setStep 단일함수 불변식으로 수정. Playwright 실측 happy/reject/error 3시나리오 PASS(JS에러 0, rejected 되감김·error 폭동결 정직성 확인). 테스트 잔여물(bad.json·TEST_001.md) 삭제. (commit f6217a0)
 - 2026-06-07 — 적대적 오케스트레이션 검증(4관점) 반영 결정론 누수 3건 수정(ADR-018): A 2티어 강제반려(hook음절>21·해시태그 하드위반 추가, 009 22음절 누수 차단)·B overclaim 회피 6종 보강+골든셋·C length/keyword 결정론화. D 문서정정(reviewer.md 코사인→difflib·단일진실원천, ORCHESTRATION/ARCHITECTURE 갱신). 45테스트 PASS. 거시구조는 4관점 만장일치 정당(과설계 없음).
 - 2026-06-07 — ARCHITECTURE.md 신설: 현 오케스트레이션 구조 종합(시스템 다이어그램·4에이전트·eval 12종·파일맵·불변원칙). ORCHESTRATION.md(상세설계)와 구분된 "한눈에 보기" 종합본. 실측 기반(함수 28·테스트 41). index 등록.
 - 2026-06-07 — /propose-research 'Gemini 2.5 Flash Lite 활용 전략'(172줄, _가이드 원본): 신규 0건. ADR-007로 이미 처리(채택 0, 영구거부 상세). ADR-007에 재점검 메모. **→ _가이드/ 8종 전부 처리 완료 + 외부 딥리서치 4종 완료 = propose-research/squeeze-report 소스 전면 소진.** (분석/판정 불요 — 처리이력 명백)

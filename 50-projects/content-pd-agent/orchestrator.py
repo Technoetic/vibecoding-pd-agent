@@ -472,6 +472,57 @@ def fetch_live_trends(topic: str) -> dict:
         return {"trends": [], "sources": []}
 
 
+def suggest_topics(n: int = 6) -> dict:
+    """
+    홈 화면 '동적 주제 제안' — 실시간 Sonar 트렌드 + 채널 인기 주제 + 지식 노트를 재료로
+    flash-lite가 '지금 찍으면 먹힐' 쇼츠 주제 n개를 새로 생성한다(과거 산출물 재탕 아님).
+    반환: {topics:[{title, why}], trends:[...], sources:[...]}.
+    실패/키부재 시 {topics:[], trends:[], sources:[]} (graceful — 프론트가 채널/샘플 폴백).
+
+    비용: Sonar 1콜 + flash-lite 1콜(합 ~0.1원 수준). 접속마다 호출 폭주 방지는
+    server.py의 TTL 캐시가 담당(여기선 순수 생성만).
+    """
+    if not API_KEY:
+        return {"topics": [], "trends": [], "sources": []}
+    try:
+        live = fetch_live_trends("비개발자 AI 노코드 쇼츠 콘텐츠")  # 토픽 무관 일반 트렌드 스캔
+    except Exception:
+        live = {"trends": [], "sources": []}
+    ch_topics = channel_top_topics(n=10)
+    kb = knowledge_digest()
+
+    ch = "\n".join(f"- {t}" for t in ch_topics) or "(없음)"
+    tr = "\n".join(f"- {x.get('keyword','')}: {x.get('why','')}" for x in live.get("trends", [])) or "(없음)"
+    sys_p = (
+        "너는 양실장 바이브코딩대학 채널의 콘텐츠 PD다. 비개발자·노코드·AI 창업 타겟의 "
+        "쇼츠/틱톡 주제를 발굴한다. 완주율(1순위 신호)과 3초 훅을 노린 '지금 찍으면 먹힐' "
+        "주제를 제안하라. 채널이 이미 다룬 주제와 겹치지 말고, 실시간 트렌드를 반영하라.\n"
+        "컴플라이언스 하드룰: '무조건/보장/누구나 N원' 같은 수익 단정·과장 클레임 금지(표시광고법). "
+        "가능성·호기심 자극으로 정직하게.\n\n"
+        "## 출력 형식 (JSON만, 설명·코드펜스 금지)\n"
+        '{"topics": [{"title": "클릭하면 그대로 기획에 넣을 쇼츠 주제 한 문장", "why": "지금 이게 먹히는 한 줄 근거"}]}'
+    )
+    user = (
+        f"제안할 주제 개수: {n}개\n\n"
+        f"=== 채널에서 이미 먹힌 인기 주제(톤·관심사 참고, 단 중복 금지) ===\n{ch}\n\n"
+        f"=== 실시간 업계 트렌드(Perplexity Sonar — 검증 출처 거론분만) ===\n{tr}\n\n"
+        f"=== 참고 지식(20-knowledge) ===\n{kb[:4000]}"
+    )
+    try:
+        out = call(sys_p, user, temperature=0.9, max_tokens=800)
+    except Exception as e:
+        print(f"   [suggest] WARN: 주제 제안 생성 실패 — {type(e).__name__}: {e}")
+        return {"topics": [], "trends": live.get("trends", []), "sources": live.get("sources", [])}
+
+    topics = []
+    for t in _as_list(out.get("topics")):
+        if isinstance(t, dict) and _as_str(t.get("title")).strip():
+            topics.append({"title": _as_str(t.get("title")).strip(), "why": _as_str(t.get("why")).strip()})
+        elif isinstance(t, str) and t.strip():               # LLM이 문자열 배열만 줘도 흡수
+            topics.append({"title": t.strip(), "why": ""})
+    return {"topics": topics[:n], "trends": live.get("trends", []), "sources": live.get("sources", [])}
+
+
 def deterministic_block(orig: dict, channel: dict, density: dict, htag: dict) -> list:
     """
     결정론 검사(originality·channel_dup·hook음절·해시태그) 위반 사유를 모두 모아 반환.

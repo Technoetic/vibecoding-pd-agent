@@ -8,7 +8,7 @@ API 키는 서버 환경변수에서만 읽어 브라우저 노출 0.
 주의: 데모는 동시 1요청 직렬 처리. 클라가 중간에 끊겨도 백엔드 기획(유료 LLM)은 완주한다(협조적 중단 미구현 — 데모 단순성).
 실행:  BIZROUTER_API_KEY=... python server.py     (PORT 환경변수 또는 8000)
 """
-import os, re, json, queue, threading, traceback
+import os, re, json, time, queue, threading, traceback
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -21,6 +21,28 @@ PORT = int(os.environ.get("PORT", 8000))
 
 # 데모 동시성: 모델 호출 직렬화(전역 cost_total/State 레이스 회피)
 _run_lock = threading.Lock()
+
+# /api/suggest TTL 캐시 — 접속마다 유료 Sonar+LLM 호출 폭주 방지(비용 통제).
+_SUGGEST_TTL = int(os.environ.get("SUGGEST_TTL", 1800))  # 기본 30분
+_suggest_cache = {"at": 0.0, "data": None}
+_suggest_lock = threading.Lock()
+
+
+def get_suggestions(refresh: bool = False) -> dict:
+    """동적 주제 제안 — TTL 캐시. refresh=True면 캐시 무시하고 재생성.
+    빈 결과(키부재·실패)는 캐시하지 않아 다음 호출에서 재시도 가능."""
+    now = time.monotonic()
+    with _suggest_lock:
+        c = _suggest_cache
+        if not refresh and c["data"] and c["data"].get("topics") and (now - c["at"]) < _SUGGEST_TTL:
+            return {**c["data"], "cached": True}
+    # 캐시 미스: 락 밖에서 생성(느린 LLM이 다른 요청 차단 안 하게)
+    data = orc.suggest_topics(n=6)
+    with _suggest_lock:
+        if data.get("topics"):                 # 성공분만 캐시(빈 결과는 재시도 허용)
+            _suggest_cache["at"] = time.monotonic()
+            _suggest_cache["data"] = data
+    return {**data, "cached": False}
 
 
 def sse_pack(event: str, data: dict) -> str:
@@ -67,6 +89,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/samples":
             self._send(200, "application/json; charset=utf-8",
                        json.dumps(load_samples(), ensure_ascii=False).encode("utf-8"))
+            return
+        if path == "/api/suggest":
+            refresh = "refresh=1" in (self.path.split("?", 1)[1] if "?" in self.path else "")
+            try:
+                data = get_suggestions(refresh=refresh)
+            except Exception as e:                          # 제안 실패가 페이지 로드를 막지 않게(빈 결과 graceful)
+                data = {"topics": [], "trends": [], "sources": [], "error": str(e)[:200]}
+            self._send(200, "application/json; charset=utf-8",
+                       json.dumps(data, ensure_ascii=False).encode("utf-8"))
             return
         if path == "/api/health":
             self._send(200, "application/json", b'{"ok":true}')
