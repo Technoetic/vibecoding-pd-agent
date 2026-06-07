@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""server.py 단위 — SSE 포맷·키 부재·폴백. 네트워크/모델 mock."""
-import sys
+"""server.py 단위 — SSE 포맷·키 부재·폴백·동시성 직렬화(502 회귀 방지). 네트워크/모델 mock."""
+import sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import server as srv
@@ -94,6 +94,65 @@ def test_suggest_refresh_bypasses_cache():
     print("PASS test_suggest_refresh_bypasses_cache")
 
 
+def test_suggest_serialized_under_run_lock():
+    """502 회귀 방지: suggest는 _run_lock으로 직렬화 — 모델 호출 중 락을 잡는다.
+    /api/pd가 락을 점유 중이면 suggest는 블로킹하지 않고 캐시/빈결과로 폴백(busy)."""
+    import orchestrator as orc
+    srv._suggest_cache.update(at=0.0, data=None)
+    # 락이 suggest_topics 실행 시점에 잡혀 있는지 검사
+    held = {"locked": None}
+    real = orc.suggest_topics
+    orc.suggest_topics = lambda n=6: (held.__setitem__("locked", srv._run_lock.locked()) or
+                                      {"topics": [{"title": "T", "why": ""}], "trends": [], "sources": []})
+    try:
+        srv.get_suggestions()
+        assert held["locked"] is True, "suggest_topics 실행 중 _run_lock이 안 잡힘(직렬화 깨짐)"
+        assert not srv._run_lock.locked(), "suggest 후 _run_lock 해제 안 됨(누수)"
+    finally:
+        orc.suggest_topics = real
+        srv._suggest_cache.update(at=0.0, data=None)
+    print("PASS test_suggest_serialized_under_run_lock")
+
+
+def test_suggest_busy_fallback_no_block():
+    """다른 요청이 _run_lock 점유 중이면 suggest는 막히지 않고 즉시 폴백(busy)."""
+    import orchestrator as orc
+    srv._suggest_cache.update(at=0.0, data=None)
+    called = {"n": 0}
+    real = orc.suggest_topics
+    orc.suggest_topics = lambda n=6: (called.__setitem__("n", called["n"]+1) or {"topics": [], "trends": [], "sources": []})
+    srv._run_lock.acquire()                      # /api/pd가 점유 중인 상황 모사
+    try:
+        t0 = time.monotonic()
+        r = srv.get_suggestions()
+        dt = time.monotonic() - t0
+        assert r.get("busy") is True, f"busy 폴백 안 함: {r}"
+        assert called["n"] == 0, "락 점유 중인데 suggest_topics를 호출함(블로킹/직렬화 위반)"
+        assert dt < 4, f"폴백이 너무 오래 걸림({dt:.1f}s) — 블로킹 의심"
+    finally:
+        srv._run_lock.release()
+        orc.suggest_topics = real
+        srv._suggest_cache.update(at=0.0, data=None)
+    print("PASS test_suggest_busy_fallback_no_block")
+
+
+def test_suggest_busy_returns_stale_cache():
+    """락 점유 중이고 만료 캐시가 있으면, 빈손 대신 가진 캐시라도 반환(UX 보존)."""
+    import orchestrator as orc
+    srv._suggest_cache.update(at=1.0, data={"topics": [{"title": "캐시주제", "why": ""}], "trends": [], "sources": []})
+    real = orc.suggest_topics
+    orc.suggest_topics = lambda n=6: {"topics": [{"title": "새로생성"}], "trends": [], "sources": []}
+    srv._run_lock.acquire()
+    try:
+        r = srv.get_suggestions()
+        assert r.get("busy") is True and r["topics"][0]["title"] == "캐시주제", r
+    finally:
+        srv._run_lock.release()
+        orc.suggest_topics = real
+        srv._suggest_cache.update(at=0.0, data=None)
+    print("PASS test_suggest_busy_returns_stale_cache")
+
+
 if __name__ == "__main__":
     test_sse_format()
     test_load_samples()
@@ -101,4 +160,7 @@ if __name__ == "__main__":
     test_suggest_cache_hit()
     test_suggest_empty_not_cached()
     test_suggest_refresh_bypasses_cache()
-    print("\n✅ ALL PASS (server: 6 tests)")
+    test_suggest_serialized_under_run_lock()
+    test_suggest_busy_fallback_no_block()
+    test_suggest_busy_returns_stale_cache()
+    print("\n✅ ALL PASS (server: 9 tests)")

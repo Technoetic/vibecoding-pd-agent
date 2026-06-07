@@ -30,14 +30,31 @@ _suggest_lock = threading.Lock()
 
 def get_suggestions(refresh: bool = False) -> dict:
     """동적 주제 제안 — TTL 캐시. refresh=True면 캐시 무시하고 재생성.
-    빈 결과(키부재·실패)는 캐시하지 않아 다음 호출에서 재시도 가능."""
+    빈 결과(키부재·실패)는 캐시하지 않아 다음 호출에서 재시도 가능.
+
+    CRITICAL(502 수정): 모델 호출은 반드시 _run_lock으로 직렬화한다. /api/pd와
+    suggest가 동시에 BizRouter를 두드리면 컨테이너가 죽어 Railway 502(fallback)가 났다.
+    단 suggest는 부가기능이므로 락을 짧게만 시도하고, 못 잡으면 캐시/빈결과로 즉시 폴백한다
+    (느린 기획 생성이 홈 화면 로드를 막지 않게)."""
     now = time.monotonic()
     with _suggest_lock:
         c = _suggest_cache
-        if not refresh and c["data"] and c["data"].get("topics") and (now - c["at"]) < _SUGGEST_TTL:
+        cached_ok = bool(c["data"] and c["data"].get("topics"))
+        if not refresh and cached_ok and (now - c["at"]) < _SUGGEST_TTL:
             return {**c["data"], "cached": True}
-    # 캐시 미스: 락 밖에서 생성(느린 LLM이 다른 요청 차단 안 하게)
-    data = orc.suggest_topics(n=6)
+        cached_snapshot = dict(c["data"]) if cached_ok else None
+
+    # 모델 호출 직렬화: _run_lock을 짧게 시도. 다른 기획이 처리 중이면 즉시 폴백(블로킹 금지).
+    acquired = _run_lock.acquire(timeout=2)
+    if not acquired:
+        if cached_snapshot:                    # 진행 중 → 가진 캐시라도 반환(만료됐어도)
+            return {**cached_snapshot, "cached": True, "busy": True}
+        return {"topics": [], "trends": [], "sources": [], "busy": True}
+    try:
+        data = orc.suggest_topics(n=6)
+    finally:
+        _run_lock.release()
+
     with _suggest_lock:
         if data.get("topics"):                 # 성공분만 캐시(빈 결과는 재시도 허용)
             _suggest_cache["at"] = time.monotonic()
@@ -147,6 +164,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 orc.run(topic, on_step=on_step)
             except Exception as e:
+                traceback.print_exc()  # 컨테이너 stderr에 남긴다 — 크래시/예외 사인 관측(로그 소실 방지)
                 q.put({"stage": "error", "reason": str(e)[:200], "trace": traceback.format_exc()[:300]})
             finally:
                 _run_lock.release()
