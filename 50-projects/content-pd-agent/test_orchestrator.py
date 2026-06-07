@@ -397,6 +397,30 @@ def test_parse_trends_normal():
     print("PASS test_parse_trends_normal")
 
 
+def test_parse_json_robust():
+    """모델 출력 JSON 견고 추출 — 코드펜스·선행/후행 텍스트·중첩.
+    공개 배포 SSE 검증서 발견한 'Extra data: line 2 column 1' 크래시(JSON 뒤 산문) 재발 방지 골든셋."""
+    cases = {
+        "순수JSON": '{"a": 1}',
+        "코드펜스": "```json\n{\"a\": 1}\n```",
+        "선행텍스트": 'Here is the JSON:\n{"a": 1}',
+        "후행ExtraData": '{"a": 1}\nThis is extra explanation.',  # ← 실제 배포 크래시 케이스
+        "중첩+후행": '{"a": {"b": 2}, "c": [1,2]}\n참고: ...',
+        "코드펜스+후행": "```json\n{\"a\": 1}\n```\nDone.",
+    }
+    for name, raw in cases.items():
+        r = orc.parse_json(raw)
+        assert isinstance(r, dict) and r.get("a") is not None, f"{name}: {r}"
+    # JSON이 전혀 없으면 JSONDecodeError
+    import json as _j
+    try:
+        orc.parse_json("그냥 평범한 문장입니다.")
+        assert False, "JSON 부재 시 예외를 던져야 함"
+    except _j.JSONDecodeError:
+        pass
+    print("PASS test_parse_json_robust")
+
+
 def test_run_has_on_step_param():
     """run에 on_step 파라미터(기본값 None)가 있어 CLI 호환 유지."""
     import inspect
@@ -594,6 +618,7 @@ if __name__ == "__main__":
     test_fetch_live_trends_malformed_trends()
     test_parse_trends_recovers_broken_json()
     test_parse_trends_normal()
+    test_parse_json_robust()
     test_run_has_on_step_param()
     test_emit_swallows_callback_exception()
     test_run_happy_path_integration()

@@ -154,14 +154,32 @@ def call_text(user: str, model: str = TREND_MODEL, temperature: float = 0.2, max
 
 
 def parse_json(text: str) -> dict:
-    """모델이 코드펜스로 감싸도 견고하게 파싱."""
+    """모델 출력에서 첫 JSON 객체를 견고하게 추출.
+    코드펜스(```json), 선행 설명, 후행 여분텍스트('Extra data')를 모두 흡수한다.
+    Sonar/flash-lite가 JSON 뒤에 산문을 덧붙이는 비결정 출력 방어(공개 배포 검증서 발견)."""
+    s = text.strip()
+    # 1) 코드펜스 제거: ```json ... ``` 또는 ``` ... ```
+    fence = re.search(r"```(?:json)?\s*(.+?)\s*```", s, re.S)
+    if fence:
+        s = fence.group(1).strip()
+    # 2) 그대로 시도
     try:
-        return json.loads(text)
+        return json.loads(s)
     except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", text, re.S)
-        if m:
-            return json.loads(m.group(0))
-        raise
+        pass
+    # 3) 첫 '{' 부터 raw_decode — 첫 유효 객체만 취하고 'Extra data' 후행 무시
+    start = s.find("{")
+    if start != -1:
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(s[start:])
+            return obj
+        except json.JSONDecodeError:
+            pass
+    # 4) 최후: greedy 중괄호 매칭
+    m = re.search(r"\{.*\}", s, re.S)
+    if m:
+        return json.loads(m.group(0))
+    raise json.JSONDecodeError("JSON 객체를 찾지 못함", text, 0)
 
 
 def load(p: Path) -> str:
