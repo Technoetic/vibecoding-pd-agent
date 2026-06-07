@@ -15,12 +15,23 @@ import os, sys, json, re, time, urllib.request, urllib.error
 from datetime import date
 from pathlib import Path
 
-# ── 경로 (스크립트 기준 상대 — 어디서 실행해도 동작) ────────────────
+# ── 경로 (어디서 실행해도 동작 — 볼트 안 / 번들 컨테이너 양쪽) ─────────
 HERE = Path(__file__).resolve().parent              # 50-projects/content-pd-agent
-VAULT = HERE.parents[1]                              # 볼트 루트(바코)
-PERSONAS = VAULT / "00-meta" / "personas"
-KNOWLEDGE = VAULT / "20-knowledge"
-LOG = VAULT / "00-meta" / "log.md"
+
+def _resolve_dir(*candidates: Path) -> Path:
+    """존재하는 첫 후보 디렉토리를 반환(없으면 마지막 후보 — graceful 폴백)."""
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[-1]
+
+# 볼트 안에서 실행: HERE.parents[1] = 볼트 루트. 컨테이너 번들: HERE/_vault.
+# parents[1]은 /app 같은 얕은 경로에서 IndexError → 안전 추출.
+_VAULT_UP = HERE.parents[1] if len(HERE.parents) >= 2 else HERE
+_BUNDLE = HERE / "_vault"                            # 컨테이너 배포용 번들(00-meta·20-knowledge 사본)
+PERSONAS = _resolve_dir(_BUNDLE / "00-meta" / "personas", _VAULT_UP / "00-meta" / "personas")
+KNOWLEDGE = _resolve_dir(_BUNDLE / "20-knowledge", _VAULT_UP / "20-knowledge")
+LOG = _VAULT_UP / "00-meta" / "log.md"              # 로그는 볼트 안에서만(컨테이너는 graceful skip)
 STATE_PATH = HERE / "State.json"
 EVAL_PATH = HERE / "eval_scenarios.json"
 OUTPUT_DIR = HERE / "output"
@@ -560,7 +571,10 @@ related:
 
 
 def append_log(line: str):
-    """본문 첫 로그 항목 위에 삽입. 프론트매터(--- ... ---)는 건너뛴다."""
+    """본문 첫 로그 항목 위에 삽입. 프론트매터(--- ... ---)는 건너뛴다.
+    컨테이너 배포(번들)엔 볼트 log.md가 없으므로 graceful skip."""
+    if not LOG.exists():
+        return
     txt = load(LOG)
     body_start = 0
     if txt.startswith("---"):
