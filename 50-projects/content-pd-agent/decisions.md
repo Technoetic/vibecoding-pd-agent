@@ -180,3 +180,12 @@ ADR 처리 이력 0건이던 _가이드 원본(542줄, Claude Code×Obsidian Saa
 - **D — 문서 정정:** reviewer.md 드리프트 제거("코사인 유사도"→difflib, 8개 나열→eval_scenarios.json 단일 진실원천 + 결정론/LLM 분리 명시). Supervisor는 "LLM콜 0 코드 컨트롤러"로 정직 프레이밍(동적 라우팅 도입은 데모 YAGNI 거부).
 - **거부 유지(정당한 트레이드오프):** 병렬화·resume 상태머신·config추상화·5번째 에이전트 — 4관점도 fits_constraints=false. ADR-006/007/010/014/016/017 거부 유지.
 - **검증:** 45 테스트 PASS(orchestrator 42+server 3). 009 누수 재현 실측 — hook 22음절 강제반려·overclaim 6종 flag·length/keyword 결정론 동작 확인. 의존성 0 유지.
+
+## ADR-019 — `Claude Code × Gamma API 프레젠테이션 자동화 가이드`(449줄) — propose-research 범위 밖, 신규 0건
+ADR 처리 이력 0건이던 외부 가이드(Claude Code로 Gamma Generate API v1.0을 구동해 텍스트→PPTX 프레젠테이션을 자동 생성하는 도구 사용법). propose-research(콘텐츠 PD 지식 결손용 딥리서치 프롬프트 생성)로 정독 점검. **Phase A(메인) "신규 0건" 판정 → Phase B(독립 haiku) ACCEPT, self_rationalization_risk LOW.** ADR-014/015/016(인프라/도구/방법론 가이드 = 신규 0건)과 동형.
+- **딥리서치 프롬프트 0건:** 가이드 449줄은 순수 **도구 사용법**(API 인증·`llms.txt` 컨텍스트 주입·비동기 폴링·예외처리·`from-template`·파이핑·커스텀 스킬). 산출물이 **PPTX 프레젠테이션**으로, 이 볼트 정체성(쇼츠/틱톡 **기획안**)과 산출물 종류가 다름. 가이드 본문에 훅·스크립트·트렌드·채널전략 등 **콘텐츠 PD 지식은 0줄**.
+- **인프라/Claude Code 설정 영역(콘텐츠 결손 아님):** 가이드 기술 패턴은 전부 인프라/설정. propose-research 안전장치 "인프라·설정은 별도 프롬프트 작성 안 함"에 정확히 걸림. ADR-015 §149-150("인프라 개선·설정 작업은 딥리서치 범위 밖") 전례 정합.
+- **유일 인접 가치 = 이미 매핑됨:** 가이드의 "승인 텍스트 기획안 → 시각 산출물 변환"은 domain-priorities **G9(이미지 생성)·G10(랜딩 배포)**에 이미 있고 둘 다 **🔵 사용자 결단(유료 키·인프라)**. 새 결손 아님.
+- **Phase B 독립 실측(haiku):** ① 지식노트 풀(hooks 2·scripts 1·trends 4) 충실, 미검증 마커 3건은 전부 저자 의도적 경계 명시(사기적 "미검증" 아님) ② eval 12종 evidence 경로 12/12 실존 ③ 남은 결손 G2/G4/G5(조건 의존)·G8/G9/G10(사용자 결단) — 미처리 결손이 아니라 의존성 구조 ④ 가이드 안 진짜 콘텐츠 결손 = 없음. **missed_gaps: none.**
+- **사실성 주의(squeeze-report 영역, propose-research 아님):** 가이드 본문에 Claude Code/Gamma 관련 사실 오류 의심 다수(`claude auth login`·`claude auth status` 서브커맨드, `~/.claude/skills/` 자동 인식, `/loop 5m` 문법, Gamma 응답 필드명 `gammaUrl`/`exportUrl`·페이로드 `numCards`/`exportAs` 미검증 추정). 이는 딥리서치 결손이 아니라 사실성 분리 대상이며, 우리 시스템과 무관해 본문화 불요.
+- **결론:** 외부 도구 가이드는 propose-research 산출물(콘텐츠 도메인 딥리서치 프롬프트) 유형 불일치. 짜낼 딥리서치 가치 0. 재호출 시 이 ADR로 재추출 차단.
