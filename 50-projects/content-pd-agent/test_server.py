@@ -213,6 +213,79 @@ def test_api_gamma_missing_id():
     print("PASS test_api_gamma_missing_id")
 
 
+# ── /api/thumbnail 프록시 (POST 구동 — rfile/headers 페이크) ──────────
+import io as _io, json as _json
+
+
+class _CapPostHandler(srv.Handler):
+    """do_POST를 네트워크 없이 구동: rfile(BytesIO)+headers 페이크 + _send 캡처."""
+    def __init__(self, path, body_bytes):
+        self.path = path
+        self.rfile = _io.BytesIO(body_bytes)
+        self.headers = {"Content-Length": str(len(body_bytes))}
+        self.captured = {}
+    def _send(self, code, ctype, body):
+        self.captured = {"code": code, "ctype": ctype, "body": body}
+
+
+def _thumb_post(prompt_obj):
+    body = _json.dumps(prompt_obj).encode("utf-8")
+    h = _CapPostHandler("/api/thumbnail", body)
+    h.do_POST()
+    return h.captured["code"], _json.loads(h.captured["body"].decode("utf-8")) if h.captured["body"] else {}
+
+
+def test_thumbnail_empty_prompt_400():
+    """prompt 없으면 400."""
+    code, _ = _thumb_post({})
+    assert code == 400, code
+    print("PASS test_thumbnail_empty_prompt_400")
+
+
+def test_thumbnail_ok_and_failed():
+    """generate_thumbnail 반환에 따라 ok/failed."""
+    import orchestrator as orc
+    real = orc.generate_thumbnail
+    srv._thumb_cache.clear()
+    orc.generate_thumbnail = lambda p: "data:image/png;base64,OK1"
+    try:
+        code, d = _thumb_post({"prompt": "a cat playing"})
+        assert code == 200 and d["status"] == "ok" and d["image"].endswith("OK1"), d
+    finally:
+        orc.generate_thumbnail = real
+    srv._thumb_cache.clear()
+    orc.generate_thumbnail = lambda p: None
+    try:
+        code, d = _thumb_post({"prompt": "another unique prompt"})
+        assert code == 200 and d["status"] == "failed", d
+    finally:
+        orc.generate_thumbnail = real
+    print("PASS test_thumbnail_ok_and_failed")
+
+
+def test_thumbnail_cache_hit_no_regenerate():
+    """동일 prompt 2회 호출 시 2번째는 캐시 — generate_thumbnail 미호출."""
+    import orchestrator as orc
+    real = orc.generate_thumbnail
+    srv._thumb_cache.clear()
+    calls = {"n": 0}
+    def counted(p):
+        calls["n"] += 1
+        return "data:image/png;base64,C%d" % calls["n"]
+    orc.generate_thumbnail = counted
+    try:
+        c1, d1 = _thumb_post({"prompt": "동일 프롬프트 cache test"})
+        c2, d2 = _thumb_post({"prompt": "동일 프롬프트 cache test"})
+        assert d1["status"] == "ok" and d2["status"] == "ok", (d1, d2)
+        assert d2.get("cached") is True, "2번째가 캐시 hit이 아님: %s" % d2
+        assert d1["image"] == d2["image"], "캐시 이미지 불일치"
+        assert calls["n"] == 1, "생성이 2번 호출됨(캐시 미작동): %d" % calls["n"]
+    finally:
+        orc.generate_thumbnail = real
+        srv._thumb_cache.clear()
+    print("PASS test_thumbnail_cache_hit_no_regenerate")
+
+
 if __name__ == "__main__":
     test_sse_format()
     test_load_samples()
@@ -226,4 +299,7 @@ if __name__ == "__main__":
     test_api_gamma_proxies_status()
     test_api_gamma_graceful_on_exception()
     test_api_gamma_missing_id()
-    print("\n✅ ALL PASS (server: 12 tests)")
+    test_thumbnail_empty_prompt_400()
+    test_thumbnail_ok_and_failed()
+    test_thumbnail_cache_hit_no_regenerate()
+    print("\n✅ ALL PASS (server)")

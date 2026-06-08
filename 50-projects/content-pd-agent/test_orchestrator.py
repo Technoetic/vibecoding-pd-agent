@@ -1277,6 +1277,150 @@ def test_fetch_live_trends_scan_fail_graceful():
     print("PASS test_fetch_live_trends_scan_fail_graceful")
 
 
+# ── G9 썸네일 이미지 생성 (generate_thumbnail) ──
+def test_generate_thumbnail_toggle_off():
+    """THUMBNAIL_IMAGE=0이면 키 있어도 None(비용 통제 토글 계약)."""
+    reset()
+    orig_t = orc.THUMBNAIL_IMAGE
+    orc.THUMBNAIL_IMAGE = False
+    try:
+        assert orc.generate_thumbnail("a cat") is None
+    finally:
+        orc.THUMBNAIL_IMAGE = orig_t
+    print("PASS test_generate_thumbnail_toggle_off")
+
+
+def test_generate_thumbnail_no_key():
+    """키 없으면 None(graceful 폴백)."""
+    reset()
+    orc.API_KEY = ""
+    assert orc.generate_thumbnail("a cat") is None
+    print("PASS test_generate_thumbnail_no_key")
+
+
+def test_generate_thumbnail_empty_prompt():
+    """빈/공백 prompt면 None."""
+    reset()
+    orc.THUMBNAIL_IMAGE = True
+    assert orc.generate_thumbnail("") is None
+    assert orc.generate_thumbnail("   ") is None
+    print("PASS test_generate_thumbnail_empty_prompt")
+
+
+def test_generate_thumbnail_korean_guard_prepend():
+    """한글 프롬프트에 영문 강제 지시(_THUMB_EN_DIRECTIVE)를 prepend해 전송."""
+    reset()
+    orc.THUMBNAIL_IMAGE = True
+    captured = {}
+    def cap(req, timeout=90):
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return FakeResp(json.dumps({"choices": [{"message": {"content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}}]}).encode())
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = cap
+    try:
+        img = orc.generate_thumbnail('썸네일: 큰 한글 "코딩 없이 수익"')
+    finally:
+        urllib.request.urlopen = orig
+    sent = captured["body"]["messages"][0]["content"]
+    assert sent.startswith("IMPORTANT: Render ALL text"), sent[:40]
+    assert "ENGLISH only" in sent
+    assert "Korean or Hangul" in sent
+    assert "코딩 없이 수익" in sent, "원본 프롬프트 보존 실패"
+    assert img == "data:image/png;base64,AAAA", img
+    print("PASS test_generate_thumbnail_korean_guard_prepend")
+
+
+def test_generate_thumbnail_extracts_image_and_accumulates():
+    """content 배열에서 data:image 추출 + usage 비용 누적."""
+    reset()
+    orc.THUMBNAIL_IMAGE = True
+    payload = {
+        "choices": [{"message": {"content": [
+            {"type": "text", "text": "Here:"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,ZZZZ"}}]}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.04},
+    }
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory(payload)
+    try:
+        img = orc.generate_thumbnail("a shocked person at a laptop")
+    finally:
+        urllib.request.urlopen = orig
+    assert img == "data:image/png;base64,ZZZZ", img
+    assert orc.cost_total == 0.04, orc.cost_total
+    assert orc.token_usage["calls"] == 1
+    print("PASS test_generate_thumbnail_extracts_image_and_accumulates")
+
+
+def test_generate_thumbnail_no_image_in_content():
+    """content가 텍스트만(이미지 없음)이면 None(폴백)."""
+    reset()
+    orc.THUMBNAIL_IMAGE = True
+    payload = {"choices": [{"message": {"content": [{"type": "text", "text": "no image"}]}}]}
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory(payload)
+    try:
+        assert orc.generate_thumbnail("x") is None
+    finally:
+        urllib.request.urlopen = orig
+    print("PASS test_generate_thumbnail_no_image_in_content")
+
+
+def test_generate_thumbnail_http_error_graceful():
+    """HTTP 오류 시 raise 없이 None."""
+    reset()
+    orc.THUMBNAIL_IMAGE = True
+    def boom(req, timeout=90): raise RuntimeError("down")
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = boom
+    try:
+        assert orc.generate_thumbnail("x") is None
+    finally:
+        urllib.request.urlopen = orig
+    print("PASS test_generate_thumbnail_http_error_graceful")
+
+
+# ── 추천 주제 환각 게이트 (is_stale_model_claim) ──
+def test_stale_model_claim_blocks_hallucination():
+    """구형 모델명 + 우월비교 동시 등장 시 True(차단)."""
+    assert orc.is_stale_model_claim("GPT-4o, Gemini 1.5 Pro를 넘어선 AI IDE로 앱 만들기")
+    assert orc.is_stale_model_claim("Claude 3를 능가하는 새 도구")
+    assert orc.is_stale_model_claim("GPT-4 Turbo보다 뛰어난 자동화")
+    print("PASS test_stale_model_claim_blocks_hallucination")
+
+
+def test_stale_model_claim_allows_normal():
+    """모델명 없거나 우월비교 없으면 False(통과)."""
+    assert not orc.is_stale_model_claim("AI IDE로 코딩 없이 첫 웹서비스 런칭")
+    assert not orc.is_stale_model_claim("Cursor로 5분 만에 앱 만들기")
+    assert not orc.is_stale_model_claim("GPT-4o로 노코드 자동화 시작하기")  # 단독 모델명은 정당
+    print("PASS test_stale_model_claim_allows_normal")
+
+
+def test_suggest_topics_drops_stale_model_claim():
+    """suggest_topics가 환각 topic을 제거하고 정상만 반환."""
+    reset()
+    sonar = _sonar_resp('{"trends":[{"keyword":"AI IDE","why":"부상"}]}')
+    suggest = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"topics": [
+        {"title": "GPT-4o를 넘어선 도구로 앱 만들기", "why": "최신"},
+        {"title": "AI IDE로 코딩 없이 첫 앱 런칭", "why": "비개발자 니즈"}]})}}]}
+    seq = [sonar, suggest]; i = {"n": 0}
+    def step(req, timeout=60):
+        p = seq[min(i["n"], len(seq) - 1)]; i["n"] += 1
+        return FakeResp(json.dumps(p).encode())
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = step
+    try:
+        out = orc.suggest_topics(n=6)
+    finally:
+        urllib.request.urlopen = orig
+    titles = [t["title"] for t in out["topics"]]
+    assert "AI IDE로 코딩 없이 첫 앱 런칭" in titles, titles
+    assert not any("넘어선" in t for t in titles), "환각 topic이 안 걸러짐: %s" % titles
+    print("PASS test_suggest_topics_drops_stale_model_claim")
+
+
 if __name__ == "__main__":
     test_token_accumulation()
     test_missing_usage_keys_defensive()
@@ -1355,4 +1499,14 @@ if __name__ == "__main__":
     test_fetch_live_trends_depth1_single_call()
     test_fetch_live_trends_depth2_two_calls()
     test_fetch_live_trends_scan_fail_graceful()
-    print("\n✅ ALL PASS (67 tests)")
+    test_generate_thumbnail_toggle_off()
+    test_generate_thumbnail_no_key()
+    test_generate_thumbnail_empty_prompt()
+    test_generate_thumbnail_korean_guard_prepend()
+    test_generate_thumbnail_extracts_image_and_accumulates()
+    test_generate_thumbnail_no_image_in_content()
+    test_generate_thumbnail_http_error_graceful()
+    test_stale_model_claim_blocks_hallucination()
+    test_stale_model_claim_allows_normal()
+    test_suggest_topics_drops_stale_model_claim()
+    print("\n✅ ALL PASS")
