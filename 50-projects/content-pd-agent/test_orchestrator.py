@@ -915,6 +915,90 @@ def test_gamma_build_input_includes_fields():
     print("PASS test_gamma_build_input_includes_fields")
 
 
+def test_agent_gamma_prompt_success():
+    """감마 프롬프트 에이전트 — LLM이 충분한 inputText 주면 그대로 사용."""
+    reset()
+    long_text = "## 제목 슬라이드\n" + ("발표용 슬라이드 본문 재구성 텍스트. " * 20)
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory(
+        {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"inputText": long_text})}}],
+         "usage": {"cost": 0.05}})
+    try:
+        out = orc.agent_gamma_prompt(_GAMMA_PAYLOAD, "주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert out and "제목 슬라이드" in out, out
+    print("PASS test_agent_gamma_prompt_success")
+
+
+def test_agent_gamma_prompt_no_key_none():
+    """API_KEY 부재 → None(조립 폴백 유도, 네트워크 0)."""
+    reset()
+    orc.API_KEY = ""
+    out = orc.agent_gamma_prompt(_GAMMA_PAYLOAD, "주제")
+    assert out is None, out
+    print("PASS test_agent_gamma_prompt_no_key_none")
+
+
+def test_agent_gamma_prompt_too_short_none():
+    """LLM이 빈약한(<100자) inputText 주면 None → 조립 폴백."""
+    reset()
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory(
+        {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"inputText": "짧음"})}}],
+         "usage": {"cost": 0.05}})
+    try:
+        out = orc.agent_gamma_prompt(_GAMMA_PAYLOAD, "주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert out is None, out
+    print("PASS test_agent_gamma_prompt_too_short_none")
+
+
+def test_agent_gamma_prompt_fail_none():
+    """LLM 호출 예외 → None(조립 폴백 유도, 예외 안 던짐)."""
+    reset()
+    def boom(req, timeout=60): raise RuntimeError("down")
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = boom
+    try:
+        out = orc.agent_gamma_prompt(_GAMMA_PAYLOAD, "주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert out is None, out
+    print("PASS test_agent_gamma_prompt_fail_none")
+
+
+def test_gamma_generate_uses_agent_then_fallback():
+    """gamma_generate가 에이전트 inputText를 우선 쓰고, 에이전트 빈약 시 조립 폴백을 쓴다."""
+    reset()
+    orc.GAMMA_API_KEY = "sk-gamma-test"
+    # 시퀀스: ① 에이전트 call(빈약 inputText → None) ② Gamma POST(generationId)
+    # → gamma_generate는 조립 폴백 inputText로 생성요청. 두 응답을 순서대로 준다.
+    responses = [
+        {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"inputText": "짧음"})}}], "usage": {"cost": 0.05}},
+        {"generationId": "genABC123"},
+    ]
+    it = iter(responses)
+    captured = {}
+    def fake(req, timeout=60):
+        body = json.loads(req.data.decode("utf-8")) if getattr(req, "data", None) else {}
+        if "inputText" in body:                 # Gamma POST 캡처
+            captured["inputText"] = body["inputText"]
+        return FakeResp(json.dumps(next(it)).encode("utf-8"))
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake
+    try:
+        r = orc.gamma_generate(_GAMMA_PAYLOAD, "주제")
+    finally:
+        urllib.request.urlopen = orig
+        orc.GAMMA_API_KEY = ""
+    assert r["status"] == "generating" and r["id"] == "genABC123", r
+    # 에이전트가 빈약 → 조립 폴백 inputText(필드 나열)가 전송됐는지
+    assert "테스트 기획안" in captured.get("inputText", ""), captured
+    print("PASS test_gamma_generate_uses_agent_then_fallback")
+
+
 def test_gamma_generate_no_key():
     """키 미설정 → 예외 아닌 {status:failed} 강등(기획안 보호)."""
     saved = orc.GAMMA_API_KEY
@@ -1251,6 +1335,11 @@ if __name__ == "__main__":
     test_word_count_score()
     test_keyword_inclusion_score()
     test_gamma_build_input_includes_fields()
+    test_agent_gamma_prompt_success()
+    test_agent_gamma_prompt_no_key_none()
+    test_agent_gamma_prompt_too_short_none()
+    test_agent_gamma_prompt_fail_none()
+    test_gamma_generate_uses_agent_then_fallback()
     test_gamma_generate_no_key()
     test_gamma_generate_success()
     test_gamma_generate_http_error_graceful()
@@ -1266,4 +1355,4 @@ if __name__ == "__main__":
     test_fetch_live_trends_depth1_single_call()
     test_fetch_live_trends_depth2_two_calls()
     test_fetch_live_trends_scan_fail_graceful()
-    print("\n✅ ALL PASS (62 tests)")
+    print("\n✅ ALL PASS (67 tests)")

@@ -211,3 +211,12 @@ ADR-019에서 "🔵 사용자 결단(유료 키·인프라)"으로 분류했던 
 - **의존성 0:** Sonar는 기존 `call_text`(urllib). score는 stdlib `urllib.parse`. 신규 패키지 0.
 - **검증(실측):** 회귀 orc 62(트렌드 9건 신규: scan·deepen·graceful·empty-noop·score·캐시공유·depth1·depth2·scan실패) + srv 12 = 74 PASS. 기존 통합 테스트(run) 무손상(DEPTH=1 reset). 프로덕션 다단계 실 e2e는 배포 후 `/api/suggest?refresh=1`로 검증.
 - **범위 밖(YAGNI):** 트렌드 20-knowledge 영속화(배치 잡 영역)·교차검증 전용 3번째 Sonar 콜(DEPTH=3은 프롬프트로 흡수)·ML 신선도 점수(출처 메타 휴리스틱으로 충분).
+
+## ADR-022 — 감마 프롬프트 작성 에이전트 (조립 함수 → LLM 능동 재구성 + 폴백)
+"감마 프롬프트 작성 에이전트도 있어?" 질문에서, 기존 `gamma_build_input`이 **LLM 없는 조립 함수**(필드 기계 나열)임을 확인. 사용자가 명시적으로 '에이전트'를 원했고 Gamma 통합 직후 맥락이라, **여기선 LLM 에이전트화가 정당**(ADR-010/013/021의 "노드 신설 거부"와 충돌 아님 — 이건 기존 조립 함수의 지능형 대체이지 새 오케스트레이션 노드 신설이 아니며, 비용 +1콜이 Gamma 크레딧 41~71에 비해 무시 수준).
+- **설계:** `agent_gamma_prompt(payload, topic)` — 승인 기획안을 '발표 서사'(제목→핵심→타겟·훅 전략→스크립트 흐름→스토리보드→썸네일→해시태그/배포)로 LLM이 능동 재구성. 단순 필드 나열 대신 "왜 이게 먹히는지"를 발표자 관점으로 짚음. payload의 풍부 필드(keywords·hooks 포함) 활용.
+- **graceful 이중 안전망:** `gamma_generate`가 `agent_gamma_prompt(...) or gamma_build_input(...)`. 에이전트가 ① 키 부재 ② LLM 예외 ③ 빈약 출력(<100자) 중 하나면 None 반환 → **조립 함수로 폴백**. Gamma 생성은 어느 경우도 안 막힘(기존 graceful 불변식 유지).
+- **컴플라이언스:** 시스템 프롬프트에 수익 단정·과장 금지(표시광고법) 명시. 출력은 일반 텍스트로만 사용(인젝션 방어 — payload는 우리 파이프라인 산출물이라 신뢰).
+- **비용:** 승인당 +1 LLM콜(~0.05원, flash-lite). Gamma 크레딧 대비 무시. 키 없으면 조립 폴백이라 비용 0.
+- **검증:** 회귀 orc 67(감마프롬프트 5건 신규: 성공·키부재·빈약·실패·generate연동)+srv 12=79 PASS(의존성 0). 기존 Gamma 테스트는 에이전트 실패→조립 폴백 경로로 여전히 통과(폴백 실증). 실 LLM 동작은 프로덕션 /pd e2e로 검증(BizRouter 키 로컬 부재).
+- **범위 밖(YAGNI):** 슬라이드 수 동적 결정·테마/이미지 프롬프트 LLM 생성(Gamma 엔진 일임)·발표 톤 사용자 선택(현 professional 고정).

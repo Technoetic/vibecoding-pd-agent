@@ -203,6 +203,55 @@ def gamma_build_input(payload: dict, topic: str) -> str:
     return "\n".join(p for p in parts if p is not None)
 
 
+def agent_gamma_prompt(payload: dict, topic: str) -> "str | None":
+    """감마 프롬프트 작성 에이전트 — 승인 기획안을 '발표용 슬라이드 구성'으로 능동 재구성한
+    inputText를 LLM이 작성한다(조립 함수 gamma_build_input의 지능형 대체).
+
+    조립 함수는 필드를 기계 나열만 하지만, 이 에이전트는 청중·흐름·강조점을 판단해
+    슬라이드 서사(제목→문제→해법 시연→CTA→해시태그)를 설계한다. 비용 +1콜(~0.05원,
+    Gamma 크레딧 41~71에 비하면 무시). 실패 시 None 반환 → 호출부가 조립 함수로 폴백.
+
+    프롬프트 인젝션 방어: payload는 우리 파이프라인 산출물이라 신뢰. 단 출력은 일반 텍스트로만 사용."""
+    if not API_KEY:
+        return None
+    title = _as_str(payload.get("title") or topic)
+    script = _as_str(payload.get("script"))
+    storyboard = _as_list(payload.get("storyboard"))
+    thumb = _as_str(payload.get("thumbnail_prompt"))
+    tags = _as_list(payload.get("hashtags"))
+    keywords = _as_list(payload.get("keywords"))
+    hooks = _as_list(payload.get("hooks"))
+    sys_p = (
+        "너는 쇼츠/틱톡 기획안을 '발표용 프레젠테이션'으로 재구성하는 슬라이드 구성 전문가다. "
+        "승인된 기획안을 받아, 청중(콘텐츠 기획자·의사결정자)이 한눈에 이해할 발표 슬라이드 흐름을 설계하라.\n"
+        "원칙:\n"
+        "- 단순 필드 나열 금지. 발표 서사로 재구성: 제목 → 핵심 한 줄 → 타겟·훅 전략 → 스크립트 흐름 → "
+        "스토리보드(장면) → 썸네일 컨셉 → 해시태그/배포. 각 슬라이드에 소제목과 핵심 불릿을 둬라.\n"
+        "- 기획의 '왜 이게 먹히는지'(완주율·훅·차별화)를 발표자 관점에서 한 줄씩 짚어라.\n"
+        "- 수익 단정·과장 금지(표시광고법). 가능성·사례한정으로.\n"
+        "- 한국어. 슬라이드 구획은 'XX 슬라이드:' 또는 '## 제목' 형태로 명확히 분리.\n"
+        "## 출력 형식 (JSON만, inputText 하나의 긴 문자열):\n"
+        '{"inputText": "발표 슬라이드용 전체 텍스트(슬라이드 구획 포함)"}'
+    )
+    user = (
+        f"주제: {topic}\n제목: {title}\n"
+        f"타겟 키워드: {keywords}\n채택 훅: {hooks}\n\n"
+        f"=== 스크립트(영상 대본) ===\n{script}\n\n"
+        f"=== 스토리보드 ===\n" + "\n".join(f"- {_as_str(s)}" for s in storyboard) + "\n\n"
+        f"=== 썸네일 컨셉 ===\n{thumb}\n\n"
+        f"=== 해시태그 ===\n{' '.join(_as_str(t) for t in tags)}"
+    )
+    try:
+        out = call(sys_p, user, temperature=0.5, max_tokens=1600)
+    except Exception as e:
+        print(f"   [gamma-prompt] WARN: 에이전트 실패 — 조립 폴백. {type(e).__name__}: {e}")
+        return None
+    text = _as_str(out.get("inputText")).strip()
+    if len(text) < 100:                # 너무 짧으면(LLM이 빈약하게 줌) 조립 폴백이 안전
+        return None
+    return text
+
+
 def _gamma_request(method: str, path: str, body: "dict | None" = None, timeout: int = 30) -> dict:
     """Gamma API 단일 호출(urllib, 의존성 0). 성공 시 파싱된 dict 반환, 실패 시 RuntimeError."""
     url = f"{GAMMA_BASE}{path}"
@@ -224,8 +273,10 @@ def gamma_generate(payload: dict, topic: str, num_cards: int = 9) -> dict:
     예외를 던지지 않는다 — Gamma 실패가 기획안 표시를 막으면 안 됨(부가기능)."""
     if not GAMMA_API_KEY:
         return {"status": "failed", "error": "GAMMA_API_KEY 미설정"}
+    # 감마 프롬프트 작성 에이전트(LLM) 우선 — 발표 서사로 능동 재구성. 실패/빈약 시 조립 폴백.
+    input_text = agent_gamma_prompt(payload, topic) or gamma_build_input(payload, topic)
     req_body = {
-        "inputText": gamma_build_input(payload, topic),
+        "inputText": input_text,
         "format": "presentation",
         "textMode": "generate",
         "numCards": num_cards,
