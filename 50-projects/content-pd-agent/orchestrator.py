@@ -716,13 +716,18 @@ def _trend_scan(topic: str) -> dict:
     실패 시 {trends:[], sources:[]} (graceful)."""
     today = date.today()
     prompt = (
-        f"지금은 {today.year}년 {today.month}월이다. 최근 3개월({today.year}년 기준) 한국의 "
-        f"비개발자·바이브코딩·AI 노코드 창업 분야에서 실제로 화제가 된 "
-        f"구체적 트렌드 키워드 5개를 웹에서 조사하라. 주제 '{topic}'와 연관되면 우선 포함하라. "
+        f"지금은 {today.year}년 {today.month}월이다. 최근 3개월({today.year}년 기준) 바이브코딩·AI 노코드·"
+        f"AI 자동화 분야에서 실제로 화제가 된 트렌드 키워드 5개를 웹에서 조사하라.\n"
+        f"★감지 범위 = 글로벌 우선:** 트렌드는 글로벌 1차 담론(Hacker News, Reddit r/vibecoding·r/cursor, "
+        f"Andrej Karpathy 등 X/소셜, 글로벌 개발 미디어)에서 먼저 터진다. 거기서 '지금 막 뜨는 것'을 감지하되, "
+        f"긱뉴스(GeekNews)·요즘IT 같은 한국 소스가 그것을 어떻게 해석하는지도 함께 참고하라(강제 아닌 우선 참고 힌트).\n"
+        f"★변환 = 한국 비개발자용:** 단, 키워드는 '한국의 비개발자·1인 창업가가 실제로 쓸 수 있는 주제'로 번역하라. "
+        f"시니어 개발자 전용 기술(예: 특정 IDE 내부 아키텍처·CVE 번호)은 비개발자 일상 업무(예: 자동화·수익화·앱 제작)로 치환. "
+        f"주제 '{topic}'와 연관되면 우선 포함하라.\n"
         f"{today.year - 1}년 이전의 낡은 트렌드는 제외하고 최신만. "
         f"검색 결과에 근거가 없으면 추측하지 말고 빈 배열로 두라. "
         f"반드시 순수 JSON만 출력(설명·코드펜스·출처링크 금지, 출처는 시스템이 별도 수집): "
-        '{"trends":[{"keyword":"...","why":"검색 근거 한줄"}]}'
+        '{"trends":[{"keyword":"...","why":"검색 근거 한줄(글로벌 진원지면 명시)"}]}'
     )
     try:
         text, sources = call_text(prompt, model=TREND_MODEL)
@@ -748,9 +753,11 @@ def _trend_deepen(topic: str, scan: dict) -> dict:
         "각 키워드의 '지금 이게 왜 뜨는지'를 구체 사례로 보강하라. "
     )
     prompt = (
-        f"지금은 {today.year}년 {today.month}월이다. 아래는 1차 스캔한 한국 비개발자·바이브코딩·AI 노코드 "
+        f"지금은 {today.year}년 {today.month}월이다. 아래는 1차 스캔한 바이브코딩·AI 노코드·자동화 "
         f"트렌드 키워드다(콘텐츠 주제 '{topic}' 맥락). 각각을 웹에서 더 깊이 조사해 "
         f"'구체 사례·왜 지금 뜨는지·최신성'을 한 문장 detail로 더하라.\n"
+        f"★글로벌 진원지가 있으면 명시하되(어디서 먼저 떴는지), detail은 '한국 비개발자·1인 창업가가 "
+        f"이걸 자기 업무·수익화에 어떻게 쓰는가' 관점으로 번역해서 써라. 시니어 개발자 전용 기술 디테일이 아니라.\n"
         f"{rigor}"
         f"근거 없으면 지어내지 말고 detail을 빈 문자열로 두라.\n\n"
         f"=== 1차 스캔 키워드 ===\n{kw_lines}\n\n"
