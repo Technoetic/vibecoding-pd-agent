@@ -73,6 +73,12 @@
   td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--bd); vertical-align:top; }
   .pass { color:var(--ok); } .fail { color:var(--no); }
   .badge { display:inline-block; background:#1f6feb33; color:var(--ac); border:1px solid var(--ac); border-radius:6px; padding:2px 8px; font-size:12px; }
+  .badge.warn { background:#f8514922; color:var(--no); border-color:var(--no); }
+  .esc-notice { background:#f8514915; border:1px solid var(--no); border-radius:8px; padding:12px 14px; margin:10px 0; font-size:13px; line-height:1.7; }
+  .esc-notice b { color:var(--no); }
+  .esc-notice .fmlist { color:var(--fg); }
+  .esc-notice .retrybtn { margin-top:10px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .esc-notice ul { margin:6px 0 0; padding-left:18px; color:var(--mut); }
   .script { white-space:pre-wrap; background:#0d1117; border-radius:8px; padding:14px; font-size:14px; }
   .muted { color:var(--mut); font-size:13px; }
   .hidden { display:none; }
@@ -117,8 +123,9 @@
 
   <div class="card hidden" id="result">
     <h2 id="rTitle"></h2>
-    <p><span class="badge">승인대기</span> <span class="muted" id="rCost"></span></p>
-    <h3>🎬 스크립트</h3><div class="script" id="rScript"></div>
+    <p><span class="badge" id="rBadge">승인대기</span> <span class="muted" id="rCost"></span></p>
+    <div id="escNotice" class="esc-notice hidden"></div>
+    <h3 id="rScriptHead">🎬 스크립트</h3><div class="script" id="rScript"></div>
     <h3>🏷 해시태그</h3><div class="muted" id="rTags"></div>
   </div>
 
@@ -270,13 +277,44 @@ function renderTrends(d){
     (d.sources && d.sources.length
       ? `<div class="trend">출처: ${d.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>`).join(" · ")}</div>` : "");
 }
+// metric 이름 → 사람 읽는 한국어 라벨(에스컬레이션 안내용)
+const METRIC_KO = {
+  length_bounds:"스크립트 길이", keyword_inclusion:"키워드 포함", originality_check:"독창성(기존 기획과 중복)",
+  channel_dup_check:"채널 영상 중복", format_compliance:"형식 준수", security_check:"보안(개인정보)",
+  income_claim_compliance:"수익 단정 규제(표시광고법)", hook_concreteness_context:"훅 구체성",
+  retention_design:"완주율 설계", korean_syllable_density:"한국어 음절 밀도", hashtag_count:"해시태그 개수",
+  factual_accuracy:"사실 정확성",
+};
+
 function renderResult(kind, d){
   const p = d.payload || {};
   $("#result").classList.remove("hidden");
   $("#rTitle").textContent = d.title || p.title || "";
   $("#rScript").textContent = p.script || "";
-  $("#rTags").textContent = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : (p.hashtags || "");  // done.payload.hashtags=배열
+  $("#rTags").textContent = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : (p.hashtags || "");
   $("#rCost").textContent = `비용 ${d.cost_krw}원 · 토큰 ${(d.token_usage||{}).total||0} · ${kind==="escalated"?"검수 미달(반려)":"승인"}`;
+
+  const badge = $("#rBadge"), notice = $("#escNotice");
+  if(kind==="escalated"){
+    // 승인본과 명확히 구분 — 막다른 길 대신 '왜 미달인지 + 다음 행동' 제시
+    badge.textContent = "미승인 초안"; badge.className = "badge warn";
+    $("#rScriptHead").textContent = "📝 마지막 시도 초안 (미승인 — 참고용)";
+    const fm = (d.failed_metrics||[]).map(m=>METRIC_KO[m]||m);
+    const logs = (d.feedback_log||[]);
+    const lastFb = logs.length ? (logs[logs.length-1].feedback||[]) : [];
+    notice.innerHTML =
+      `<b>⚠ Eval ${(d.max_retries??3)}회 재작성에도 검수 기준 미달</b> — 품질 게이트가 막아 발행하지 않았습니다(노출 금지 정책).` +
+      (fm.length ? `<div class="fmlist" style="margin-top:6px">반복 미달 항목: <b>${fm.map(esc).join(", ")}</b></div>` : "") +
+      (lastFb.length ? `<div style="margin-top:6px">마지막 반려 사유:<ul>${lastFb.slice(0,3).map(x=>`<li>${esc(String(x).slice(0,120))}</li>`).join("")}</ul></div>` : "") +
+      `<div style="margin-top:8px">👉 주제를 더 <b>구체적인 앵글</b>(특정 업종·상황·숫자 근거)로 좁혀 다시 시도하면 통과 확률이 올라갑니다.</div>` +
+      `<button class="retrybtn" id="escRetry">주제 다듬어 다시 시도</button>`;
+    notice.classList.remove("hidden");
+    const rb = $("#escRetry"); if(rb) rb.onclick = ()=>{ $("#topic").focus(); $("#topic").scrollIntoView({behavior:"smooth",block:"center"}); };
+  } else {
+    badge.textContent = "승인대기"; badge.className = "badge";
+    $("#rScriptHead").textContent = "🎬 스크립트";
+    notice.classList.add("hidden"); notice.innerHTML = "";
+  }
 }
 async function renderFallbackSamples(){   // error 폴백. server.py /api/samples hashtags=문자열 → join 안 함
   const s = await getSamples();
@@ -394,6 +432,7 @@ async function run(topic){
   $("#progress").classList.remove("hidden");
   renderSteps();
   $("#evalTable tbody").innerHTML = ""; $("#evalCount").textContent = "";
+  $("#escNotice").classList.add("hidden"); $("#escNotice").innerHTML = "";  // 이전 에스컬레이션 안내 정리
   banner("");
   $(".pbar").classList.remove("stopped");
   $("#pbarFill").className = "";          // is-* 제거

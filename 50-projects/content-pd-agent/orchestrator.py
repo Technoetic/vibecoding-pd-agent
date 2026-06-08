@@ -871,7 +871,17 @@ def run(topic: str, on_step=None):
                        f"재시도 {max_retries}회 초과 에스컬레이션 (비용 {cost_total:.3f}원)")
             print(f"\n⚠ 재시도 {max_retries}회 초과 — 사용자 에스컬레이션. 중단.")
             print(f"   누적 비용: {cost_total:.4f}원 | 토큰 {token_usage['total']}")
-            emit("escalated", verdict="escalated", max_retries=max_retries, cost_krw=round(cost_total, 4))
+            # 막다른 길 방지(UX): 마지막 초안·누적 반려·마지막 검수 실패항목을 함께 보낸다.
+            last_checks = _as_list(rev.get("checks"))
+            failed_metrics = [c.get("metric") for c in last_checks
+                              if isinstance(c, dict) and not c.get("pass") and c.get("metric")]
+            emit("escalated", verdict="escalated", max_retries=max_retries,
+                 cost_krw=round(cost_total, 4), token_usage=dict(token_usage),
+                 title=task["content_payload"].get("title"),
+                 payload=task["content_payload"],          # 마지막(미승인) 초안 — 버리지 않고 노출
+                 feedback_log=task["feedback_log"],         # 회차별 반려 사유 누적
+                 failed_metrics=failed_metrics,             # 마지막 검수에서 떨어진 항목
+                 eval=last_checks)
             return
 
 

@@ -638,6 +638,49 @@ def test_run_happy_path_integration():
     print("PASS test_run_happy_path_integration")
 
 
+def test_run_escalation_payload():
+    """run() 에스컬레이션 경로: reviewer가 계속 rejected → max_retries 초과 시
+    escalated 이벤트에 마지막 초안(payload)·반려 누적(feedback_log)·실패 metric이 실린다(막다른길 방지 UX)."""
+    reset()
+    import tempfile, pathlib, json as _json
+    sonar = {"choices":[{"finish_reason":"stop","message":{"content":'{"trends":[]}'}}],"usage":{"cost":0.1}}
+    analyst = {"choices":[{"finish_reason":"stop","message":{"content":'{"keywords":["k"],"hooks":["3초 훅"]}'}}],"usage":{"cost":0.05}}
+    creator = {"choices":[{"finish_reason":"stop","message":{"content":'{"title":"에스컬테스트 고유제목 zzqq","script":"'+("단어 "*120)+'","storyboard":["s"],"thumbnail_prompt":"t","hashtags":["#태그"]}'}}],"usage":{"cost":0.05}}
+    reviewer_rej = {"choices":[{"finish_reason":"stop","message":{"content":'{"verdict":"rejected","checks":[{"metric":"retention_design","pass":false,"comment":"완주율 설계 부족"}],"feedback":["완주율을 높이세요"]}'}}],"usage":{"cost":0.05}}
+    # 순서: sonar, analyst, 그다음 (creator, reviewer)를 max_retries+1=4회 반복
+    responses = [sonar, analyst]
+    for _ in range(4):
+        responses += [creator, reviewer_rej]
+    it = iter(responses)
+    def fake(req, timeout=60):
+        return FakeResp(json.dumps(next(it)).encode("utf-8"))
+    tmpdir = pathlib.Path(tempfile.mkdtemp())
+    (tmpdir / "State.json").write_text(_json.dumps({"max_retries": 3, "tasks": []}), encoding="utf-8")
+    (tmpdir / "log.md").write_text("---\ntitle: log\n---\n\n- 기존\n", encoding="utf-8")
+    saved = (orc.STATE_PATH, orc.OUTPUT_DIR, orc.LOG, orc.CATALOG_PATH)
+    orc.STATE_PATH, orc.OUTPUT_DIR, orc.LOG, orc.CATALOG_PATH = (
+        tmpdir / "State.json", tmpdir / "output", tmpdir / "log.md", tmpdir / "channel_catalog.json")
+    captured = {}
+    def on_step(p):
+        if p["stage"] == "escalated":
+            captured.update(p)
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake
+    try:
+        orc.run("에스컬테스트 고유주제 zzqq", on_step=on_step)
+    finally:
+        urllib.request.urlopen = orig
+        orc.STATE_PATH, orc.OUTPUT_DIR, orc.LOG, orc.CATALOG_PATH = saved
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    assert captured.get("verdict") == "escalated", captured
+    assert captured.get("payload", {}).get("title"), "마지막 초안(payload.title) 누락"
+    assert captured.get("payload", {}).get("script"), "마지막 초안(payload.script) 누락"
+    assert isinstance(captured.get("feedback_log"), list) and captured["feedback_log"], "feedback_log 누락"
+    assert "retention_design" in (captured.get("failed_metrics") or []), captured.get("failed_metrics")
+    print("PASS test_run_escalation_payload")
+
+
 def test_korean_syllable_count():
     """한글 음절수 결정론 카운트 — 한글만 세고 공백·영문·기호 제외."""
     assert orc.korean_syllables("안녕하세요") == 5, orc.korean_syllables("안녕하세요")
@@ -774,6 +817,7 @@ if __name__ == "__main__":
     test_run_has_on_step_param()
     test_emit_swallows_callback_exception()
     test_run_happy_path_integration()
+    test_run_escalation_payload()
     test_korean_syllable_count()
     test_hook_syllable_check()
     test_hashtag_count_score()
@@ -784,4 +828,4 @@ if __name__ == "__main__":
     test_numeric_claim_extract()
     test_word_count_score()
     test_keyword_inclusion_score()
-    print("\n✅ ALL PASS (45 tests)")
+    print("\n✅ ALL PASS (46 tests)")
