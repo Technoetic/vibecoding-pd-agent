@@ -10,6 +10,7 @@ API 키는 서버 환경변수에서만 읽어 브라우저 노출 0.
 """
 import os, re, json, time, queue, threading, traceback
 from pathlib import Path
+from urllib.parse import unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import orchestrator as orc
@@ -113,6 +114,22 @@ class Handler(BaseHTTPRequestHandler):
                 data = get_suggestions(refresh=refresh)
             except Exception as e:                          # 제안 실패가 페이지 로드를 막지 않게(빈 결과 graceful)
                 data = {"topics": [], "trends": [], "sources": [], "error": str(e)[:200]}
+            self._send(200, "application/json; charset=utf-8",
+                       json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
+        if path == "/api/gamma":
+            # Gamma 생성 상태 프록시 — 키는 orchestrator가 환경변수에서만(브라우저 노출 0).
+            # 모델호출 아님(502 레이스 무관)이라 _run_lock 불필요. 클라가 5초 폴링.
+            qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+            gid = ""
+            for kv in qs.split("&"):
+                if kv.startswith("id="):
+                    gid = unquote(kv[3:])
+                    break
+            try:
+                data = orc.gamma_status(gid)
+            except Exception as e:                          # 폴링 실패가 프론트를 깨지 않게 graceful
+                data = {"status": "failed", "error": str(e)[:200]}
             self._send(200, "application/json; charset=utf-8",
                        json.dumps(data, ensure_ascii=False).encode("utf-8"))
             return

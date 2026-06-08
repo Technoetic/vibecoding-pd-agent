@@ -189,3 +189,15 @@ ADR 처리 이력 0건이던 외부 가이드(Claude Code로 Gamma Generate API 
 - **Phase B 독립 실측(haiku):** ① 지식노트 풀(hooks 2·scripts 1·trends 4) 충실, 미검증 마커 3건은 전부 저자 의도적 경계 명시(사기적 "미검증" 아님) ② eval 12종 evidence 경로 12/12 실존 ③ 남은 결손 G2/G4/G5(조건 의존)·G8/G9/G10(사용자 결단) — 미처리 결손이 아니라 의존성 구조 ④ 가이드 안 진짜 콘텐츠 결손 = 없음. **missed_gaps: none.**
 - **사실성 주의(squeeze-report 영역, propose-research 아님):** 가이드 본문에 Claude Code/Gamma 관련 사실 오류 의심 다수(`claude auth login`·`claude auth status` 서브커맨드, `~/.claude/skills/` 자동 인식, `/loop 5m` 문법, Gamma 응답 필드명 `gammaUrl`/`exportUrl`·페이로드 `numCards`/`exportAs` 미검증 추정). 이는 딥리서치 결손이 아니라 사실성 분리 대상이며, 우리 시스템과 무관해 본문화 불요.
 - **결론:** 외부 도구 가이드는 propose-research 산출물(콘텐츠 도메인 딥리서치 프롬프트) 유형 불일치. 짜낼 딥리서치 가치 0. 재호출 시 이 ADR로 재추출 차단.
+
+## ADR-020 — Gamma 슬라이드 자동 생성 파이프라인 통합 (G9/G10 부분 실현, 사용자 결단)
+ADR-019에서 "🔵 사용자 결단(유료 키·인프라)"으로 분류했던 Gamma 통합을 **사용자가 키를 제공하고 "자율주행 통합" 지시**해 실현. `/pd` 승인 즉시 기획안을 프레젠테이션(PDF)으로 자동 생성. brainstorming → 설계(docs/superpowers/specs/2026-06-08-gamma-pipeline-integration-design.md) → 구현 → e2e 검증.
+- **접근법 A 채택(서버 백그라운드 + 클라 폴링):** 승인 시 `gamma_generate`가 생성요청만(블로킹 0) → `done`에 `gamma{id,status}` → 프론트가 `/api/gamma?id=` 5초 폴링 → server.py 프록시가 `gamma_status` 대리 → completed면 PDF 새 탭. **거부한 것:** ① SSE 안에서 끝까지 폴링(200초+ → Railway 502·_run_lock 장기점유) ② 클라가 Gamma 직접 호출(API 키 브라우저 노출 — server.py "노출 0" 원칙 위반).
+- **결정(사용자 확정):** 트리거=승인 즉시 자동 / 출력=PDF 링크+새 탭 / 흐름=분리 폴링 / 실패=기획안 정상+슬라이드만 실패 표시(graceful degradation).
+- **의존성 0 유지:** Gamma 호출도 urllib(stdlib). `gamma_generate`/`gamma_status`/`gamma_build_input` + `_gamma_request`. BizRouter usage와 별개 크레딧이라 token_usage 미누적(credits는 status로 노출만).
+- **graceful 불변식:** Gamma 실패(키 부재·크레딧·HTTP)는 예외 대신 `{status:failed,error}` 강등 → done payload(기획안) 절대 안 막음. escalated(미승인)는 슬라이드화 안 함. 회귀 `test_run_done_has_gamma_field`로 고정.
+- **🔬 실 버그 수정(e2e 발견):** Gamma 앞단 **Cloudflare가 기본 `Python-urllib` UA를 HTTP 403 code 1010으로 차단**. `_gamma_request`에 `User-Agent` 헤더 추가로 해결(curl은 통과했으나 urllib은 막힘 — Railway에서도 동일 필요). SSL은 로컬 한정(certifi SSL_CERT_FILE), Railway Linux는 정상.
+- **보안:** `/api/gamma` id를 `[A-Za-z0-9_-]{1,64}` 정규식 검증(경로주입·SSRF 방어). 키는 환경변수만.
+- **검증(실측):** ① 회귀 orc 53 + srv 12 = 65 PASS(의존성 0) ② 실 Gamma 키 백엔드 e2e — 생성→폴링(50초)→completed→pdf_url 확보 ③ `/api/gamma` 프록시 curl 3종(완성 id·경로주입 거부·id없음 거부) ④ Playwright 프론트 e2e — 슬라이드 영역 표시·생성중 스피너·폴링·PDF/Gamma 링크·window.open 팝업·JS에러 0, 시각 스크린샷 확인.
+- **비용:** 호출당 크레딧 ~41~71(실측). 승인 즉시 자동이라 매 승인 소모. 잔여 크레딧 status 노출(투명성). **향후 비용 통제 필요 시 env 토글(자동→수동) 여지만 남김(현 범위 밖, YAGNI).**
+- **범위 밖(YAGNI):** from-template 브랜드 템플릿·PPTX export·크레딧 사전 하드게이트.

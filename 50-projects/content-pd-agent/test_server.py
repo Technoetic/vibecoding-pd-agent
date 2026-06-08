@@ -153,6 +153,66 @@ def test_suggest_busy_returns_stale_cache():
     print("PASS test_suggest_busy_returns_stale_cache")
 
 
+# ── /api/gamma 프록시 (Handler를 소켓 없이 구동 — _send 캡처) ──────────
+class _CapHandler(srv.Handler):
+    """do_GET을 네트워크 없이 구동: __init__ 우회 + _send 캡처."""
+    def __init__(self, path):
+        self.path = path
+        self.captured = {}
+    def _send(self, code, ctype, body):
+        self.captured = {"code": code, "ctype": ctype, "body": body}
+
+
+def _gamma_get(path):
+    h = _CapHandler(path)
+    h.do_GET()
+    import json
+    return json.loads(h.captured["body"].decode("utf-8"))
+
+
+def test_api_gamma_proxies_status():
+    """/api/gamma?id=X → orc.gamma_status(X) 위임 + JSON 반환."""
+    import orchestrator as orc
+    real = orc.gamma_status
+    seen = {}
+    orc.gamma_status = lambda gid: (seen.__setitem__("id", gid) or
+                                    {"status": "completed", "pdf_url": "https://x/AI.pdf"})
+    try:
+        d = _gamma_get("/api/gamma?id=abc123XYZ")
+        assert seen["id"] == "abc123XYZ", seen
+        assert d["status"] == "completed" and d["pdf_url"] == "https://x/AI.pdf", d
+    finally:
+        orc.gamma_status = real
+    print("PASS test_api_gamma_proxies_status")
+
+
+def test_api_gamma_graceful_on_exception():
+    """gamma_status가 예외를 던져도 프록시는 {status:failed}로 graceful(프론트 폴링 보호)."""
+    import orchestrator as orc
+    real = orc.gamma_status
+    def boom(gid): raise RuntimeError("내부 폭발")
+    orc.gamma_status = boom
+    try:
+        d = _gamma_get("/api/gamma?id=abc123")
+        assert d["status"] == "failed" and "폭발" in d["error"], d
+    finally:
+        orc.gamma_status = real
+    print("PASS test_api_gamma_graceful_on_exception")
+
+
+def test_api_gamma_missing_id():
+    """id 없으면 빈 문자열로 위임 → gamma_status가 자체 검증(failed)."""
+    import orchestrator as orc
+    real = orc.gamma_status
+    orc.gamma_status = lambda gid: {"status": "failed", "error": "잘못된 generation id"} if not gid else {"status": "completed"}
+    try:
+        d = _gamma_get("/api/gamma")
+        assert d["status"] == "failed", d
+    finally:
+        orc.gamma_status = real
+    print("PASS test_api_gamma_missing_id")
+
+
 if __name__ == "__main__":
     test_sse_format()
     test_load_samples()
@@ -163,4 +223,7 @@ if __name__ == "__main__":
     test_suggest_serialized_under_run_lock()
     test_suggest_busy_fallback_no_block()
     test_suggest_busy_returns_stale_cache()
-    print("\n✅ ALL PASS (server: 9 tests)")
+    test_api_gamma_proxies_status()
+    test_api_gamma_graceful_on_exception()
+    test_api_gamma_missing_id()
+    print("\n✅ ALL PASS (server: 12 tests)")

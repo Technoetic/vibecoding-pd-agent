@@ -91,6 +91,15 @@
   .story li { counter-increment:sc; background:#0d1117; border-radius:8px; padding:10px 12px 10px 40px; margin-bottom:6px; font-size:14px; position:relative; }
   .story li::before { content:counter(sc); position:absolute; left:10px; top:10px; width:20px; height:20px; background:var(--ac); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
   .thumb { background:#0d1117; border:1px dashed var(--bd); border-radius:8px; padding:12px; font-size:13px; color:var(--mut); font-family:ui-monospace,Menlo,Consolas,monospace; line-height:1.6; white-space:pre-wrap; }
+  .gamma { background:#0d1117; border:1px solid var(--bd); border-radius:8px; padding:14px; font-size:14px; line-height:1.7; }
+  .gamma .gspin { display:inline-block; width:14px; height:14px; border:2px solid var(--bd); border-top-color:var(--ac); border-radius:50%; animation:gspin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes gspin { to { transform:rotate(360deg); } }
+  .gamma a.glink { display:inline-block; margin:4px 10px 4px 0; background:var(--ac); color:#fff; text-decoration:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; }
+  .gamma a.glink.sec { background:transparent; color:var(--ac); border:1px solid var(--ac); }
+  .gamma .gfail { color:var(--no); }
+  .gamma .gmut { color:var(--mut); font-size:12px; margin-top:6px; }
+  .gamma .retrybtn { margin-top:8px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:7px 13px; font-size:13px; font-weight:600; cursor:pointer; }
+  @media (prefers-reduced-motion: reduce){ .gamma .gspin { animation:none !important; } }
   .metatable td { padding:6px 8px; font-size:13px; }
   .metatable td:first-child { color:var(--mut); width:42%; }
   .metatable .ok { color:var(--ok); } .metatable .no { color:var(--no); }
@@ -163,6 +172,11 @@
     <div id="rMetaWrap" class="hidden">
       <h3>📋 기획 메타 (실측)</h3>
       <table class="metatable"><tbody id="rMeta"></tbody></table>
+    </div>
+
+    <div id="rGammaWrap" class="hidden">
+      <h3>📊 발표 슬라이드 (Gamma)</h3>
+      <div id="rGamma" class="gamma"></div>
     </div>
   </div>
 
@@ -389,11 +403,64 @@ function renderResult(kind, d){
     $("#rScriptHead").textContent = "🎬 스크립트";
     notice.classList.add("hidden"); notice.innerHTML = "";
   }
+
+  // 발표 슬라이드(Gamma) — 승인(done)에만. escalated(미승인)는 슬라이드화 안 함.
+  if(kind!=="escalated" && d.gamma) renderGamma(d.gamma);
+  else $("#rGammaWrap").classList.add("hidden");
+}
+
+// ── Gamma 슬라이드: 승인 즉시 서버가 생성요청 → 클라가 /api/gamma 폴링 → PDF 새탭 ──
+let _gammaPoll = null, _gammaOpened = false;
+function renderGamma(g){
+  const wrap = $("#rGammaWrap"), box = $("#rGamma");
+  if(_gammaPoll){ clearTimeout(_gammaPoll); _gammaPoll = null; }
+  _gammaOpened = false;
+  wrap.classList.remove("hidden");
+  const st = g.status || "failed";
+  if(st === "generating" && g.id){
+    box.innerHTML = `<span class="gspin"></span>슬라이드 생성 중… <span class="gmut">보통 1~2분 걸려요. 완료되면 PDF가 새 탭으로 열립니다.</span>`;
+    pollGamma(g.id, 0);
+  } else {
+    // 키 미설정·생성요청 실패 — 기획안은 그대로, 슬라이드만 실패 표시(graceful)
+    gammaFail(g.error || "슬라이드 생성 실패", null);
+  }
+}
+function gammaCompleted(d){
+  const box = $("#rGamma");
+  const pdf = d.pdf_url || "", gamma = d.gamma_url || "";
+  const rem = (d.credits && (d.credits.remaining!=null)) ? `<div class="gmut">잔여 크레딧 ${d.credits.remaining}</div>` : "";
+  box.innerHTML =
+    (pdf ? `<a class="glink" href="${esc(pdf)}" target="_blank" rel="noopener">📥 PDF 열기</a>` : "") +
+    (gamma ? `<a class="glink sec" href="${esc(gamma)}" target="_blank" rel="noopener">🔗 Gamma에서 편집</a>` : "") +
+    rem;
+  if(pdf && !_gammaOpened){ _gammaOpened = true; window.open(pdf, "_blank", "noopener"); }  // 새 탭 1회
+}
+function gammaFail(msg, retryId){
+  const box = $("#rGamma");
+  box.innerHTML = `<div class="gfail">📊 슬라이드 생성 실패: ${esc(String(msg).slice(0,160))}</div>`
+    + `<div class="gmut">기획안은 정상 승인되었습니다. 슬라이드만 다시 시도할 수 있어요.</div>`
+    + (retryId ? `<button class="retrybtn" id="gRetry">슬라이드 다시 확인</button>` : "");
+  if(retryId){ const b=$("#gRetry"); if(b) b.onclick=()=>{ box.innerHTML=`<span class="gspin"></span>다시 확인 중…`; pollGamma(retryId, 0); }; }
+}
+async function pollGamma(id, attempt){
+  const MAX = 24;  // 5초 * 24 = 2분
+  if(attempt >= MAX){
+    gammaFail("생성 지연(2분 초과) — 잠시 후 다시 확인하세요", id);
+    return;
+  }
+  try{
+    const r = await fetch("/api/gamma?id=" + encodeURIComponent(id));
+    const d = await r.json();
+    if(d.status === "completed"){ gammaCompleted(d); return; }
+    if(d.status === "failed"){ gammaFail(d.error || "Gamma 생성 실패", id); return; }
+    // pending/generating — 계속 폴링
+  }catch(e){ /* 일시 네트워크 오류 — 다음 폴링서 회복 */ }
+  _gammaPoll = setTimeout(()=>pollGamma(id, attempt+1), 5000);
 }
 async function renderFallbackSamples(){   // error 폴백. server.py /api/samples hashtags=문자열 → join 안 함
   const s = await getSamples();
   if(!s.length) return;
-  ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap","#escNotice"].forEach(x=>$(x).classList.add("hidden"));  // 샘플엔 풍부 섹션 없음
+  ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap","#escNotice","#rGammaWrap"].forEach(x=>$(x).classList.add("hidden"));  // 샘플엔 풍부 섹션 없음
   $("#rBadge").textContent = "샘플"; $("#rBadge").className = "badge"; $("#rScriptHead").textContent = "🎬 스크립트";
   $("#result").classList.remove("hidden");
   $("#rTitle").textContent = "[샘플] " + (s[0].title||"");
@@ -526,7 +593,8 @@ async function run(topic){
   renderSteps();
   $("#evalTable tbody").innerHTML = ""; $("#evalCount").textContent = "";
   $("#escNotice").classList.add("hidden"); $("#escNotice").innerHTML = "";  // 이전 에스컬레이션 안내 정리
-  ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap"].forEach(s=>$(s).classList.add("hidden"));  // 이전 기획서 섹션 정리
+  ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap","#rGammaWrap"].forEach(s=>$(s).classList.add("hidden"));  // 이전 기획서 섹션 정리
+  if(_gammaPoll){ clearTimeout(_gammaPoll); _gammaPoll = null; } _gammaOpened = false;  // 이전 슬라이드 폴링 중단(중복 새탭 방지)
   banner("");
   $(".pbar").classList.remove("stopped");
   $("#pbarFill").className = "";          // is-* 제거

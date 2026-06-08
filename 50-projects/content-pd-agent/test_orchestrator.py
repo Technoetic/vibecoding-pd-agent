@@ -6,7 +6,7 @@ squeeze-report C3(토큰 분해 로깅) 본문화 동반 회귀.
 
 실행:  python test_orchestrator.py   (exit 0 = PASS)
 """
-import io, json, sys, urllib.request
+import io, json, sys, urllib.request, urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -893,6 +893,140 @@ def test_keyword_inclusion_score():
     print("PASS test_keyword_inclusion_score")
 
 
+# ── Gamma 슬라이드 통합 (urllib mock, 네트워크 0) ──────────────────
+_GAMMA_PAYLOAD = {
+    "title": "테스트 기획안", "script": "본문 스크립트",
+    "storyboard": ["장면1", "장면2"], "thumbnail_prompt": "썸네일 컨셉",
+    "hashtags": ["#태그1", "#태그2"],
+}
+
+
+def test_gamma_build_input_includes_fields():
+    """payload의 모든 필드가 inputText에 들어간다(슬라이드 누락 방지)."""
+    txt = orc.gamma_build_input(_GAMMA_PAYLOAD, "테스트주제")
+    for must in ["테스트 기획안", "본문 스크립트", "장면1", "장면2", "썸네일 컨셉", "#태그1"]:
+        assert must in txt, f"누락: {must}"
+    assert "테스트주제" in txt
+    print("PASS test_gamma_build_input_includes_fields")
+
+
+def test_gamma_generate_no_key():
+    """키 미설정 → 예외 아닌 {status:failed} 강등(기획안 보호)."""
+    saved = orc.GAMMA_API_KEY
+    orc.GAMMA_API_KEY = ""
+    try:
+        r = orc.gamma_generate(_GAMMA_PAYLOAD, "주제")
+        assert r["status"] == "failed" and "미설정" in r["error"], r
+    finally:
+        orc.GAMMA_API_KEY = saved
+    print("PASS test_gamma_generate_no_key")
+
+
+def test_gamma_generate_success():
+    """200 + generationId → {status:generating, id}."""
+    saved = orc.GAMMA_API_KEY
+    orc.GAMMA_API_KEY = "sk-gamma-test"
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory({"generationId": "abc123XYZ"})
+    try:
+        r = orc.gamma_generate(_GAMMA_PAYLOAD, "주제")
+        assert r["status"] == "generating" and r["id"] == "abc123XYZ", r
+    finally:
+        urllib.request.urlopen = orig
+        orc.GAMMA_API_KEY = saved
+    print("PASS test_gamma_generate_success")
+
+
+def test_gamma_generate_http_error_graceful():
+    """HTTP 4xx → 예외 아닌 {status:failed}(기획안 보호)."""
+    saved = orc.GAMMA_API_KEY
+    orc.GAMMA_API_KEY = "sk-gamma-test"
+    orig = urllib.request.urlopen
+    def boom(req, timeout=30):
+        # hdrs 타입은 런타임 무관(스텁 한계). gamma_generate의 HTTPError graceful 강등 검증이 목적.
+        raise urllib.error.HTTPError(req.full_url, 402, "Payment Required", None, io.BytesIO(b'{"error":"no credits"}'))  # type: ignore[arg-type]
+    urllib.request.urlopen = boom
+    try:
+        r = orc.gamma_generate(_GAMMA_PAYLOAD, "주제")
+        assert r["status"] == "failed" and "402" in r["error"], r
+    finally:
+        urllib.request.urlopen = orig
+        orc.GAMMA_API_KEY = saved
+    print("PASS test_gamma_generate_http_error_graceful")
+
+
+def test_gamma_status_completed():
+    """completed → pdf_url·gamma_url 추출."""
+    saved = orc.GAMMA_API_KEY
+    orc.GAMMA_API_KEY = "sk-gamma-test"
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory({
+        "status": "completed", "exportUrl": "https://x/AI.pdf",
+        "gammaUrl": "https://gamma.app/docs/x", "credits": {"remaining": 2800},
+    })
+    try:
+        r = orc.gamma_status("abc123")
+        assert r["status"] == "completed", r
+        assert r["pdf_url"] == "https://x/AI.pdf" and r["gamma_url"] == "https://gamma.app/docs/x", r
+        assert r["credits"]["remaining"] == 2800, r
+    finally:
+        urllib.request.urlopen = orig
+        orc.GAMMA_API_KEY = saved
+    print("PASS test_gamma_status_completed")
+
+
+def test_gamma_status_bad_id():
+    """잘못된 id(특수문자) → 호출 전 거부(SSRF/경로주입 방어)."""
+    saved = orc.GAMMA_API_KEY
+    orc.GAMMA_API_KEY = "sk-gamma-test"
+    try:
+        r = orc.gamma_status("../../etc/passwd")
+        assert r["status"] == "failed" and "잘못된" in r["error"], r
+        r2 = orc.gamma_status("")
+        assert r2["status"] == "failed", r2
+    finally:
+        orc.GAMMA_API_KEY = saved
+    print("PASS test_gamma_status_bad_id")
+
+
+def test_run_done_has_gamma_field():
+    """run() 승인 경로의 done 이벤트에 gamma 필드가 실린다(키 부재면 failed로라도)."""
+    reset()
+    orc.GAMMA_API_KEY = ""   # 키 부재 → gamma=failed, 그래도 done은 정상
+    import tempfile, pathlib, json as _json
+    sonar = {"choices":[{"finish_reason":"stop","message":{"content":'{"trends":[]}'}}],"usage":{"cost":0.1}}
+    analyst = {"choices":[{"finish_reason":"stop","message":{"content":'{"keywords":["고유키워드zzqq"],"hooks":["3초 훅"]}'}}],"usage":{"cost":0.05}}
+    creator = {"choices":[{"finish_reason":"stop","message":{"content":'{"title":"감마필드테스트 고유제목 zzqq","script":"'+("고유키워드zzqq "*120)+'","storyboard":["s"],"thumbnail_prompt":"t","hashtags":["#태그"]}'}}],"usage":{"cost":0.05}}
+    reviewer_ok = {"choices":[{"finish_reason":"stop","message":{"content":'{"verdict":"approved","checks":[{"metric":"retention_design","pass":true,"comment":"ok"}],"feedback":[]}'}}],"usage":{"cost":0.05}}
+    it = iter([sonar, analyst, creator, reviewer_ok])
+    def fake(req, timeout=60):
+        return FakeResp(json.dumps(next(it)).encode("utf-8"))
+    tmpdir = pathlib.Path(tempfile.mkdtemp())
+    (tmpdir / "State.json").write_text(_json.dumps({"max_retries": 3, "tasks": []}), encoding="utf-8")
+    (tmpdir / "log.md").write_text("---\ntitle: log\n---\n\n- 기존\n", encoding="utf-8")
+    saved = (orc.STATE_PATH, orc.OUTPUT_DIR, orc.LOG, orc.CATALOG_PATH)
+    orc.STATE_PATH, orc.OUTPUT_DIR, orc.LOG, orc.CATALOG_PATH = (
+        tmpdir / "State.json", tmpdir / "output", tmpdir / "log.md", tmpdir / "channel_catalog.json")
+    captured = {}
+    def on_step(p):
+        if p.get("stage") == "done":
+            captured.update(p)
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake
+    try:
+        orc.run("감마필드 통합테스트 고유주제 zzqq", on_step=on_step)
+    finally:
+        urllib.request.urlopen = orig
+        orc.STATE_PATH, orc.OUTPUT_DIR, orc.LOG, orc.CATALOG_PATH = saved
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    assert captured.get("stage") == "done", captured
+    assert "gamma" in captured, "done에 gamma 필드 없음"
+    assert captured["gamma"]["status"] == "failed", captured["gamma"]  # 키 부재라 failed
+    assert "payload" in captured, "기획안 payload는 그대로(graceful)"
+    print("PASS test_run_done_has_gamma_field")
+
+
 if __name__ == "__main__":
     test_token_accumulation()
     test_missing_usage_keys_defensive()
@@ -950,4 +1084,11 @@ if __name__ == "__main__":
     test_numeric_claim_extract()
     test_word_count_score()
     test_keyword_inclusion_score()
-    print("\n✅ ALL PASS (46 tests)")
+    test_gamma_build_input_includes_fields()
+    test_gamma_generate_no_key()
+    test_gamma_generate_success()
+    test_gamma_generate_http_error_graceful()
+    test_gamma_status_completed()
+    test_gamma_status_bad_id()
+    test_run_done_has_gamma_field()
+    print("\n✅ ALL PASS (53 tests)")
