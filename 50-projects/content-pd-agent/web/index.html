@@ -27,6 +27,10 @@
   .chip.fresh { animation:chipin .3s ease backwards; }
   .step { display:flex; align-items:center; gap:10px; padding:7px 0; color:var(--mut); transition:color .25s; }
   .step.active { color:var(--fg); } .step.done { color:var(--ok); }
+  .step.fail { color:var(--no); }
+  .step.fail .dot { background:var(--no); border-color:var(--no); }
+  .step.fail .dot::after { content:"✕"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:700; }
+  .step.fail .meta { color:var(--no); }
   .dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--bd); flex:none; position:relative; transition:all .25s; }
   .step.done .dot { background:var(--ok); border-color:var(--ok); }
   /* 진행 중: 회전 스피너 + 맥동 */
@@ -347,10 +351,27 @@ function finish(kind, d){
     $("#go").disabled = false;
     return;
   }
+  if(kind==="escalated"){
+    // 정직성: 검수 미달인데 모든 단계 ✓는 모순. reviewer는 done 승격 금지하고 '반려'로 표시.
+    // (앞 단계 supervisor~creator는 실제로 통과했으므로 done 유지)
+    P.active = null;
+    for(const [k] of STEPS){
+      const el=$(`.step[data-k="${k}"]`); if(!el) continue;
+      if(k==="reviewer"){ el.classList.remove("active","done"); el.classList.add("fail"); }
+      else el.classList.add("done");
+    }
+    setReviewBar();                // reviewer 칸까지만(100% 금지 — 완주 안 함)
+    fill.classList.add("is-escalated");
+    setLabel(`검수 미달 — 에스컬레이션 (재시도 ${d.max_retries}회 초과)`);
+    renderResult(kind, d);
+    $("#go").disabled = false;
+    return;
+  }
+  // done(승인)
   allDone();
   setProgress(100, {allowRewind:true});
-  fill.classList.add(kind==="escalated" ? "is-escalated" : "is-done");
-  setLabel(kind==="escalated" ? `검수 미달 — 에스컬레이션 (재시도 ${d.max_retries}회 초과)` : "완료 ✓");
+  fill.classList.add("is-done");
+  setLabel("완료 ✓");
   renderResult(kind, d);
   $("#go").disabled = false;
 }
