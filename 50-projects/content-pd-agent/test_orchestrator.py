@@ -298,6 +298,49 @@ def test_pick_hook():
     print("PASS test_pick_hook")
 
 
+def test_expand_script():
+    """단어수 미달 자동 확장(결정론 후처리) — 라이브 e2e에서 length_bounds 단독 escalated를
+    막은 수정. retry 소모 없이 '확장만', 키워드 보존, 퇴행 방어, 호출 상한."""
+    import orchestrator as _orc
+    orig_call = _orc.call
+    calls = []
+    try:
+        # 1) 이미 충분(target 이상) → 호출 0(비용 0)
+        _orc.call = lambda s, u, **k: (_ for _ in ()).throw(AssertionError("불필요 호출"))
+        long_in = "단어 " * 130
+        assert _orc.expand_script(long_in, target=130) == long_in
+
+        # 2) 미달 → 확장 채택(더 길고 키워드 보존)
+        def good(s, u, **k):
+            calls.append(1)
+            return {"script": "노코드 창업 " + ("확장단어 " * 140)}
+        _orc.call = good
+        r = _orc.expand_script("짧은 초안", target=130, keywords=["노코드 창업"])
+        assert len(r.split()) >= 130 and "노코드" in r, r[:50]
+        assert len(calls) == 1, "목표 달성 시 1콜에서 조기종료"
+
+        # 3) 퇴행(모델이 더 짧게) → 원본 유지 + max 2회 상한
+        calls.clear()
+        _orc.call = lambda s, u, **k: (calls.append(1), {"script": "짧음"})[1]
+        base = "원본이 더 긴 스크립트입니다 정말 길어요 보존되어야 합니다"
+        r3 = _orc.expand_script(base, target=130)
+        assert r3 == base, "퇴행본은 버리고 원본 유지"
+        assert len(calls) == 2, "퇴행이어도 max_passes=2 상한"
+
+        # 4) 키워드 누락 확장본은 거부(원본 유지)
+        calls.clear()
+        _orc.call = lambda s, u, **k: (calls.append(1), {"script": "키워드없는 " + ("채움 " * 140)})[1]
+        r4 = _orc.expand_script("짧은 원본", target=130, keywords=["반드시있어야할키워드"])
+        assert "반드시있어야할키워드" not in r4 and r4 == "짧은 원본", "키워드 누락 확장은 거부"
+
+        # 5) call 예외 → best-effort 원본 반환(파이프라인 보호)
+        _orc.call = lambda s, u, **k: (_ for _ in ()).throw(RuntimeError("API down"))
+        assert _orc.expand_script("원본유지", target=130) == "원본유지"
+    finally:
+        _orc.call = orig_call
+    print("PASS test_expand_script")
+
+
 def test_call_text_returns_content_and_sources():
     """call_text: json_object 없이 본문 + metadata.search_results 반환."""
     reset()
@@ -873,6 +916,7 @@ if __name__ == "__main__":
     test_deterministic_block_none()
     test_deterministic_block_measured_metrics()
     test_pick_hook()
+    test_expand_script()
     test_call_text_returns_content_and_sources()
     test_call_text_no_metadata()
     test_call_text_length_truncation_raises()

@@ -376,6 +376,47 @@ def word_count_score(script: str, min_w: int = 100, max_w: int = 250) -> dict:
     return {"words": n, "ok": min_w <= n <= max_w}
 
 
+def expand_script(script: str, target: int = 130, keywords=None, hook: str = "", max_passes: int = 2) -> str:
+    """길이 미달 전용 결정론 후처리 — retry_count를 소모하지 않고 '확장만' 요청한다.
+    라이브 e2e에서 Creator(flash-lite)가 70→97→90으로 100단어를 못 넘겨 length_bounds 단독
+    escalated가 났다(프롬프트로 120 지시해도 변덕). 여기서 분량만 메운다.
+
+    채택은 호출부 책임(키워드·originality 비악화 가드). 헬퍼는 '더 길고 키워드 보존된' 후보만 반환.
+    250단어 상한 명시(반대편 length_bounds·음절캡 충돌 방지), 과장단정 추가 금지(overclaim 회귀 차단)."""
+    cur = _as_str(script)
+    kws = [k for k in (keywords or []) if k]
+    best, best_w = cur, len(cur.split())
+    if best_w >= target:
+        return cur
+    for _ in range(max(1, max_passes)):
+        sys_p = (
+            "너는 한국어 쇼츠 스크립트 '확장 편집기'다. 아래 본문의 메시지·구조·훅·키워드를 100% 보존하면서 분량만 늘린다.\n"
+            "## 절대 규칙\n"
+            f"- 출력 단어 수: 공백 분리 ★{target}단어 이상★ 250단어 이하(상한 초과 금지).\n"
+            "- 기존 문장을 삭제·치환하지 말고, 구체 사례·실행 단계·근거 수치를 '추가'만 하라.\n"
+            "- 새 주제·새 결론 도입 금지. 같은 내용을 더 자세히 풀어라.\n"
+            "- 아래 키워드 어구는 표기 그대로 본문에 유지/재등장: " + (", ".join(kws) if kws else "(없음)") + "\n"
+            + (f"- 첫 3초 훅 문장은 변형 없이 맨 앞에 유지: {hook}\n" if hook else "")
+            + "- '무조건·보장·누구나·100%·평생·완전·쌉가능' 등 단정/과장 표현 추가 금지(가능성·사례한정으로).\n"
+            "## 출력 형식 (JSON만)\n"
+            '{"script": "확장된 본문(기존 보존 + 추가)"}'
+        )
+        need = target - len(cur.split())
+        user = f"확장 대상 본문(현재 {len(cur.split())}단어, 약 {need}단어 더 필요):\n\n{cur}"
+        try:
+            r = call(sys_p, user, temperature=0.2, max_tokens=1400)  # 감온: 보존성↑ 변덕↓
+        except Exception:
+            break                                                    # 실패 시 best-effort 반환(Reviewer가 잡음)
+        ext = _as_str(r.get("script")).strip()
+        ew = len(ext.split())
+        kept_kw = all(_keyword_present(k, ext) for k in kws) if kws else True
+        if ext and ew > best_w and kept_kw and ew <= 250:            # 더 길고·키워드보존·상한내 → 채택
+            best, best_w, cur = ext, ew, ext
+        if best_w >= target:                                         # 목표 달성 → 추가 콜 차단
+            break
+    return best
+
+
 _COMMON_TOKENS = {"AI"}  # 변별력 없는 초고빈도 공통토큰. 'AI'만. 도메인 빈출어 추가 금지(0.8 임계 케이스 즉시 반려 회귀).
 
 
@@ -851,6 +892,22 @@ def run(topic: str, on_step=None):
         cre["script"] = _as_str(cre.get("script"))
         cre["title"] = _as_str(cre.get("title"))
         cre["thumbnail_prompt"] = _as_str(cre.get("thumbnail_prompt"))
+
+        # 결정론 길이 후처리: 100단어 미만이면 retry 소모 없이 '확장만' 시도(라이브 e2e: length_bounds
+        # 단독 escalated 차단). originality 비악화 가드 — 확장본이 표절 임계를 넘기면 원본 유지(롤백).
+        if len(cre["script"].split()) < 100:
+            before = len(cre["script"].split())
+            cand = expand_script(cre["script"], target=130, keywords=keywords,
+                                 hook=pick_hook(hooks), max_passes=2)
+            others = existing_scripts(exclude_task_id=task_id)
+            cand_orig = originality_score(cand, others)
+            if len(cand.split()) > before and cand_orig["is_original"]:   # 더 길고 표절 아닐 때만 채택
+                cre["script"] = cand
+            after = len(cre["script"].split())
+            print(f"   [expand] 길이 후처리 {before}→{after}단어 (목표 130, retry 불소모, "
+                  f"original={cand_orig['is_original']})")
+            emit("creator-expand", before=before, after=after, target=130)
+
         task["content_payload"].update(cre)
         task["status"] = "pending_review"
         write_state(state)
