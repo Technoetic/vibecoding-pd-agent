@@ -7,9 +7,10 @@ updated: 2026-06-08
 related_module: "20-knowledge/trends/한국 AI 교육 유튜브 시장 구조.md"
 related_gap: trend_source_landscape
 priority: medium
-status: draft
+status: answered
 related_report: "바이브코딩 트렌드 정보 채널 순위.md"
 deepresearch_input: "PROMPT_한국 바이브코딩 트렌드 소스 지형.deepresearch.txt"
+answered_by: "비개발자 AI 코딩 트렌드 정보 생태계 분석.md"
 post_traffic: false
 ai_priority: medium
 tags:
