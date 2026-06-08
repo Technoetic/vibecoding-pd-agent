@@ -115,6 +115,27 @@
   .gamma .gmut { color:var(--mut); font-size:12px; margin-top:6px; }
   .gamma .retrybtn { margin-top:8px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:7px 13px; font-size:13px; font-weight:600; cursor:pointer; }
   @media (prefers-reduced-motion: reduce){ .gamma .gspin { animation:none !important; } }
+  /* Gamma 완료 모달 */
+  .modal-overlay { position:fixed; inset:0; background:rgba(1,4,9,.72); display:flex; align-items:center;
+    justify-content:center; z-index:1000; padding:20px; animation:modalFade .18s ease-out; }
+  .modal-card { background:var(--card); border:1px solid var(--bd); border-radius:16px; padding:32px 28px 24px;
+    max-width:380px; width:100%; text-align:center; position:relative; box-shadow:0 20px 60px rgba(0,0,0,.5);
+    animation:modalPop .2s ease-out; }
+  .modal-x { position:absolute; top:12px; right:14px; background:none; border:0; color:var(--mut); font-size:22px;
+    line-height:1; cursor:pointer; padding:4px 8px; border-radius:6px; }
+  .modal-x:hover { color:var(--fg); background:#0d1117; }
+  .modal-icon { font-size:44px; margin-bottom:8px; }
+  .modal-title { font-size:19px; margin:0 0 8px; color:var(--fg); }
+  .modal-desc { font-size:13px; color:var(--mut); margin:0 0 22px; line-height:1.6; }
+  .modal-actions { display:flex; gap:10px; justify-content:center; }
+  .modal-primary { background:var(--ac); color:#fff; text-decoration:none; border-radius:9px; padding:11px 22px;
+    font-size:14px; font-weight:600; }
+  .modal-secondary { background:#0d1117; color:var(--fg); border:1px solid var(--bd); border-radius:9px;
+    padding:11px 20px; font-size:14px; font-weight:600; cursor:pointer; }
+  .modal-secondary:hover { border-color:var(--mut); }
+  @keyframes modalFade { from{opacity:0} to{opacity:1} }
+  @keyframes modalPop { from{opacity:0; transform:translateY(8px) scale(.97)} to{opacity:1; transform:none} }
+  @media (prefers-reduced-motion: reduce){ .modal-overlay, .modal-card { animation:none !important; } }
   .metatable td { padding:6px 8px; font-size:13px; }
   .metatable td:first-child { color:var(--mut); width:42%; }
   .metatable .ok { color:var(--ok); } .metatable .no { color:var(--no); }
@@ -213,6 +234,20 @@
       flash-lite 단일모델(호출당 ~0.05원) · originality·채널중복 코드 실측 주입(LLM 추측 아님) ·
       한국 표시광고법·뒷광고 규제 차단 · 트렌드는 Sonar 실시간 웹검색(출처 포함)
     </p>
+  </div>
+</div>
+
+<!-- Gamma 생성 완료 모달 (전면 오버레이) -->
+<div class="modal-overlay hidden" id="gammaModal" role="dialog" aria-modal="true" aria-labelledby="gmTitle">
+  <div class="modal-card">
+    <button class="modal-x" id="gmClose" aria-label="닫기">×</button>
+    <div class="modal-icon">📊</div>
+    <h2 class="modal-title" id="gmTitle">발표 슬라이드 완성!</h2>
+    <p class="modal-desc">PDF가 준비되었습니다. 아래 버튼으로 새 탭에서 열 수 있어요.</p>
+    <div class="modal-actions">
+      <a class="modal-primary" id="gmOpen" href="#" target="_blank" rel="noopener">📥 PDF 열기</a>
+      <button class="modal-secondary" id="gmDismiss">닫기</button>
+    </div>
   </div>
 </div>
 
@@ -509,11 +544,10 @@ function renderResult(kind, d){
 }
 
 // ── Gamma 슬라이드: 승인 즉시 서버가 생성요청 → 클라가 /api/gamma 폴링 → PDF 새탭 ──
-let _gammaPoll = null, _gammaOpened = false;
+let _gammaPoll = null;
 function renderGamma(g){
   const wrap = $("#rGammaWrap"), box = $("#rGamma");
   if(_gammaPoll){ clearTimeout(_gammaPoll); _gammaPoll = null; }
-  _gammaOpened = false;
   wrap.classList.remove("hidden");
   const st = g.status || "failed";
   if(st === "generating" && g.id){
@@ -524,12 +558,44 @@ function renderGamma(g){
     gammaFail(g.error || "슬라이드 생성 실패", null);
   }
 }
-function gammaCompleted(d){
+// ── Gamma 완료 모달 (class 캡슐화 + 비동기 show) ──
+// 자동 window.open(팝업 차단 취약) 대체. show(pdf)는 모달이 닫힐 때 resolve하는 Promise.
+// 닫기 4경로: X·닫기 버튼·ESC·배경 클릭. PDF 열기는 사용자 클릭이라 차단 회피.
+class GammaModal {
+  constructor(){
+    this.overlay = $("#gammaModal");
+    this.openLink = $("#gmOpen");
+    this._onKey = (e)=>{ if(e.key === "Escape") this.close(); };
+    // 닫기 트리거 바인딩(1회)
+    $("#gmClose").addEventListener("click", ()=>this.close());
+    $("#gmDismiss").addEventListener("click", ()=>this.close());
+    this.overlay.addEventListener("click", (e)=>{ if(e.target === this.overlay) this.close(); });
+  }
+  // 모달 표시 → 닫힐 때(어떤 경로든) resolve. 호출부는 await로 닫힘을 기다릴 수 있다.
+  show(pdf){
+    this.openLink.href = pdf;
+    this.overlay.classList.remove("hidden");
+    document.addEventListener("keydown", this._onKey);
+    requestAnimationFrame(()=>$("#gmDismiss").focus());   // 포커스 이동(접근성)
+    return new Promise((resolve)=>{ this._resolve = resolve; });
+  }
+  close(){
+    if(this.overlay.classList.contains("hidden")) return;
+    this.overlay.classList.add("hidden");
+    document.removeEventListener("keydown", this._onKey);
+    if(this._resolve){ const r = this._resolve; this._resolve = null; r(); }
+  }
+}
+let _gammaModal = null;
+function getGammaModal(){ return _gammaModal || (_gammaModal = new GammaModal()); }
+
+async function gammaCompleted(d){
   const box = $("#rGamma");
   const pdf = d.pdf_url || "";
+  // 인라인 PDF 링크 유지 — 모달 닫아도 다시 열 수 있는 안전망
   box.innerHTML =
     (pdf ? `<a class="glink" href="${esc(pdf)}" target="_blank" rel="noopener">📥 PDF 열기</a>` : "");
-  if(pdf && !_gammaOpened){ _gammaOpened = true; window.open(pdf, "_blank", "noopener"); }  // 새 탭 1회
+  if(pdf){ await getGammaModal().show(pdf); }   // 자동 새 탭 제거 → 모달(사용자 클릭으로 열기)
 }
 function gammaFail(msg, retryId){
   const box = $("#rGamma");
@@ -690,7 +756,8 @@ async function run(topic){
   $("#evalTable tbody").innerHTML = ""; $("#evalCount").textContent = "";
   $("#escNotice").classList.add("hidden"); $("#escNotice").innerHTML = "";  // 이전 에스컬레이션 안내 정리
   ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap","#rGammaWrap"].forEach(s=>$(s).classList.add("hidden"));  // 이전 기획서 섹션 정리
-  if(_gammaPoll){ clearTimeout(_gammaPoll); _gammaPoll = null; } _gammaOpened = false;  // 이전 슬라이드 폴링 중단(중복 새탭 방지)
+  if(_gammaPoll){ clearTimeout(_gammaPoll); _gammaPoll = null; }   // 이전 슬라이드 폴링 중단
+  if(_gammaModal){ _gammaModal.close(); }                          // 이전 완료 모달 떠있으면 닫기
   banner("");
   $(".pbar").classList.remove("stopped");
   $("#pbarFill").className = "";          // is-* 제거
