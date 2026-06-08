@@ -363,16 +363,26 @@ def word_count_score(script: str, min_w: int = 100, max_w: int = 250) -> dict:
     return {"words": n, "ok": min_w <= n <= max_w}
 
 
+_COMMON_TOKENS = {"AI"}  # 변별력 없는 초고빈도 공통토큰. 'AI'만. 도메인 빈출어 추가 금지(0.8 임계 케이스 즉시 반려 회귀).
+
+
 def _keyword_present(keyword: str, script: str, tok_ratio: float = 0.7, window: int = 20) -> bool:
     """키워드 토큰의 근접 부분일치. 한국어 조사·어순 변형은 인정하되,
     흩어진 우연 매칭·공통토큰 스터핑은 차단(결정론 엄정성 보존).
     - 단일 토큰: substring 존재로 충분(기존 엄정성 유지)
-    - 복합 토큰: 자기 토큰 70%가 좁은 윈도우 안에 군집해야 통과(근접 요구)."""
+    - 복합 토큰: 자기 토큰 70%가 좁은 윈도우 안에 군집해야 통과(근접 요구).
+      추가로 공통토큰('AI') 외 고유토큰이 최소 1개 등장해야 통과 — 2토큰 키워드의
+      need=round(2*0.7)=1 붕괴로 'AI'만 스터핑해도 통과되던 가짜통과를 차단(e2e 발견)."""
     toks = [t for t in re.split(r"\s+", (keyword or "").strip()) if t]
     if not toks:
         return False
     if len(toks) == 1:
         return toks[0] in script
+    # 안티-스터핑: 복합 키워드는 고유토큰(비-공통) 최소 1개가 본문에 있어야 한다.
+    # uniq가 비면(키워드 전체가 공통토큰) 이 제약을 건너뛰어 기존 동작 보존.
+    uniq = [t for t in toks if t not in _COMMON_TOKENS]
+    if uniq and not any(u in script for u in uniq):
+        return False
     need = max(1, round(len(toks) * tok_ratio))
     pos = {t: [m.start() for m in re.finditer(re.escape(t), script)] for t in toks}
     present = [t for t in toks if pos[t]]

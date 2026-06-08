@@ -793,6 +793,18 @@ def test_keyword_inclusion_score():
     stuff = "AI AI AI AI AI 정말 좋은 AI AI"
     rs = orc.keyword_inclusion_score(stuff, ["엑셀 대체 AI", "데이터 분석 AI"])
     assert rs["ok"] is False, rs
+
+    # (신규 D2) 스터핑 차단 — 2토큰 'AI 복합' 키워드 e2e 발견 케이스(회귀 가드).
+    # need=round(2*0.7)=1 붕괴로 'AI'만 박은 무관 스크립트가 1.0 통과하던 가짜통과를
+    # 고유토큰 필수 가드로 차단한다(고유토큰 '웹서비스/마케팅/자동화' 부재 → 전부 탈락).
+    stuff2 = "AI 너무 좋아요 AI 최고 AI 짱 AI 입니다"
+    rs2 = orc.keyword_inclusion_score(stuff2, ["AI 웹서비스", "AI 마케팅", "AI 자동화"])
+    assert rs2["ratio"] == 0.0 and rs2["ok"] is False, rs2
+    # 반례: 같은 'AI 복합' 키워드라도 고유토큰이 본문에 있으면 정상 통과(과차단 방지).
+    ok2 = orc.keyword_inclusion_score("AI 웹서비스로 마케팅 자동화를 했어요.", ["AI 웹서비스", "AI 마케팅", "AI 자동화"])
+    assert ok2["ok"] is True, ok2
+    # 가드 경계: 키워드 전체가 공통토큰('AI')뿐이면 가드를 건너뛰어 기존 단일토큰 동작 보존.
+    assert orc._keyword_present("AI", "AI로 코딩합니다") is True
     print("PASS test_keyword_inclusion_score")
 
 
