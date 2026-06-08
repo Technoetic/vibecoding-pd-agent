@@ -740,6 +740,26 @@ def extract_numeric_claims(script: str) -> list:
     return out
 
 
+# ── 추천 주제 환각 게이트: 구형 모델 우월비교 차단(결정론) ──
+# "GPT-4o·Gemini 1.5를 넘어선" 같은 낡은 모델명+우월비교 = 사실오류(구형을 최신처럼·범주오류).
+# suggest_topics가 LLM 생성 topic을 필터. 단독 모델명은 정당할 수 있어 우월비교 동시등장 시만 차단.
+_STALE_MODEL_PATTERN = re.compile(
+    r"GPT[\s-]?4o|GPT[\s-]?4\s*Turbo|GPT[\s-]?3\.?5|"
+    r"Gemini\s*1\.[05]|Gemini\s*1\.0|Gemini\s*Pro(?!\s*\d)|"
+    r"Claude\s*3(?!\.\d*\s*[45])|Claude\s*2|Llama\s*[23]\b",
+    re.IGNORECASE,
+)
+_SUPERIORITY_PATTERN = re.compile(
+    r"넘어선|넘어서는|넘어|뛰어넘는|뛰어넘|능가|압도|제친|제치고|이긴|이기는|보다\s*(나은|뛰어난|강력|우수|좋은)",
+)
+
+
+def is_stale_model_claim(text: str) -> bool:
+    """구형 모델명 + 우월비교가 동시 등장하면 True(사실오류 환각). 둘 중 하나만이면 False."""
+    t = text or ""
+    return bool(_STALE_MODEL_PATTERN.search(t) and _SUPERIORITY_PATTERN.search(t))
+
+
 def channel_top_topics(n: int = 10) -> list:
     """카탈로그 조회수 상위 N개 영상 제목 — Trend Analyst가 '채널에서 먹힌 주제' 근거로 사용."""
     if not CATALOG_PATH.exists():
@@ -951,11 +971,21 @@ def suggest_topics(n: int = 6) -> dict:
         return {"topics": [], "trends": live.get("trends", []), "sources": live.get("sources", [])}
 
     topics = []
+    dropped = 0
     for t in _as_list(out.get("topics")):
         if isinstance(t, dict) and _as_str(t.get("title")).strip():
-            topics.append({"title": _as_str(t.get("title")).strip(), "why": _as_str(t.get("why")).strip()})
+            cand = {"title": _as_str(t.get("title")).strip(), "why": _as_str(t.get("why")).strip()}
         elif isinstance(t, str) and t.strip():               # LLM이 문자열 배열만 줘도 흡수
-            topics.append({"title": t.strip(), "why": ""})
+            cand = {"title": t.strip(), "why": ""}
+        else:
+            continue
+        # 환각 게이트: 구형 모델 우월비교(사실오류)면 버림(틀린 주제 노출 < 적게 노출)
+        if is_stale_model_claim(cand["title"] + " " + cand["why"]):
+            dropped += 1
+            continue
+        topics.append(cand)
+    if dropped:
+        print(f"   [suggest] 환각 게이트: 구형 모델 우월비교 {dropped}건 제거")
     return {"topics": topics[:n], "trends": live.get("trends", []), "sources": live.get("sources", [])}
 
 
