@@ -98,6 +98,15 @@
   .story li { counter-increment:sc; background:#0d1117; border-radius:8px; padding:10px 12px 10px 40px; margin-bottom:6px; font-size:14px; position:relative; }
   .story li::before { content:counter(sc); position:absolute; left:10px; top:10px; width:20px; height:20px; background:var(--ac); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
   .thumb { background:#0d1117; border:1px dashed var(--bd); border-radius:8px; padding:12px; font-size:13px; color:var(--mut); font-family:ui-monospace,Menlo,Consolas,monospace; line-height:1.6; white-space:pre-wrap; }
+  /* 썸네일 이미지(나노바나나 생성) + 로딩 스켈레톤 */
+  .thumbimg { margin-bottom:10px; }
+  .thumbimg img { width:100%; max-width:512px; border-radius:8px; border:1px solid var(--bd); display:block; }
+  .thumbimg.loading { height:180px; max-width:512px; border-radius:8px; border:1px solid var(--bd);
+    display:flex; align-items:center; justify-content:center; color:var(--mut); font-size:13px;
+    background:linear-gradient(100deg,#0d1117 30%,#161b22 50%,#0d1117 70%); background-size:200% 100%;
+    animation:thumbshimmer 1.4s ease-in-out infinite; }
+  @keyframes thumbshimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .thumb.collapsed { font-size:11px; opacity:.6; max-height:0; padding:0; border:0; overflow:hidden; }
   .gamma { background:#0d1117; border:1px solid var(--bd); border-radius:8px; padding:14px; font-size:14px; line-height:1.7; }
   .gamma .gspin { display:inline-block; width:14px; height:14px; border:2px solid var(--bd); border-top-color:var(--ac); border-radius:50%; animation:gspin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
   @keyframes gspin { to { transform:rotate(360deg); } }
@@ -169,7 +178,8 @@
     </div>
 
     <div id="rThumbWrap" class="hidden">
-      <h3>🎨 썸네일 프롬프트</h3>
+      <h3>🎨 썸네일</h3>
+      <div id="rThumbImg" class="thumbimg hidden"></div>
       <div id="rThumb" class="thumb"></div>
     </div>
 
@@ -278,6 +288,38 @@ function renderScript(raw){
     return `<div class="sc-body">${hl}</div>`;
   }).join("");
 }
+
+// 썸네일 이미지 비동기 로딩: /api/thumbnail POST → data:image base64를 <img>로.
+// 실패·키없음·토글OFF는 status!=="ok" → 프롬프트 텍스트 폴백(이미지 영역 숨김).
+let _thumbSeq = 0;                                // 연속 기획 시 이전 응답 무시(레이스 방지)
+async function loadThumbnail(prompt){
+  const seq = ++_thumbSeq;
+  const imgBox = $("#rThumbImg"), txtBox = $("#rThumb");
+  imgBox.className = "thumbimg loading";          // 스켈레톤 표시
+  imgBox.textContent = "🎨 썸네일 이미지 생성 중…";
+  txtBox.classList.remove("collapsed");
+  try{
+    const r = await fetch("/api/thumbnail", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({prompt})
+    });
+    const d = await r.json();
+    if(seq !== _thumbSeq) return;                 // 더 최신 요청이 있으면 폐기
+    if(d && d.status === "ok" && typeof d.image === "string" && d.image.startsWith("data:image")){
+      const im = document.createElement("img");
+      im.alt = "생성된 썸네일"; im.src = d.image;  // data URL — src에만 주입(XSS 안전)
+      imgBox.className = "thumbimg"; imgBox.textContent = "";
+      imgBox.appendChild(im);
+      txtBox.classList.add("collapsed");          // 프롬프트는 접어 보조 정보로
+      return;
+    }
+  }catch(e){ /* graceful */ }
+  if(seq !== _thumbSeq) return;
+  imgBox.className = "thumbimg hidden";           // 폴백: 이미지 숨기고 프롬프트 텍스트만
+  imgBox.textContent = "";
+  txtBox.classList.remove("collapsed");
+}
+
 function fmt(x){ return (typeof x==="number") ? x.toFixed(2) : (x==null ? "-" : String(x)); }
 
 // ── 타이머: 경과시간 텍스트만 갱신(진행바 width 절대 안 건드림) ──
@@ -404,8 +446,12 @@ function renderRichSections(p){
   const sb = arr(p.storyboard);
   if(sb.length){ $("#rStoryWrap").classList.remove("hidden"); $("#rStory").innerHTML = sb.map(s=>`<li>${esc(s)}</li>`).join(""); }
   else $("#rStoryWrap").classList.add("hidden");
-  // 썸네일 프롬프트
-  if(p.thumbnail_prompt){ $("#rThumbWrap").classList.remove("hidden"); $("#rThumb").textContent = p.thumbnail_prompt; }
+  // 썸네일: 프롬프트 텍스트 + 나노바나나 이미지 비동기 로딩
+  if(p.thumbnail_prompt){
+    $("#rThumbWrap").classList.remove("hidden");
+    $("#rThumb").textContent = p.thumbnail_prompt;
+    loadThumbnail(p.thumbnail_prompt);            // 비동기 — 기획안 표시를 막지 않음
+  }
   else $("#rThumbWrap").classList.add("hidden");
   // 실측 메타(결정론 측정값) — 있는 것만
   const rows = [];

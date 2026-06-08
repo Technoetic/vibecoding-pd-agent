@@ -138,8 +138,39 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(404, "text/plain", b"not found")
 
+    def _handle_thumbnail(self):
+        # 썸네일 이미지 생성 프록시 — 키는 orchestrator가 환경변수에서만(브라우저 노출 0).
+        # 생성 실패/키 없음/토글 OFF는 status:"failed"로 강등 → 프론트가 프롬프트 텍스트 폴백.
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            length = 0
+        if length < 0 or length > 1_000_000:        # thumbnail_prompt는 짧음
+            self._send(400, "application/json", b'{"error":"bad content-length"}')
+            return
+        try:
+            req = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        except json.JSONDecodeError:
+            req = {}
+        prompt = (req.get("prompt") or "").strip()
+        if not prompt:
+            self._send(400, "application/json", b'{"error":"prompt required"}')
+            return
+        try:
+            with _run_lock:                          # 모델 호출 — 전역 cost_total 레이스 회피(기존 정책 일관)
+                image = orc.generate_thumbnail(prompt)
+            payload = {"status": "ok", "image": image} if image else {"status": "failed"}
+        except Exception as e:                        # 어떤 예외도 프론트를 깨지 않게 graceful
+            payload = {"status": "failed", "error": str(e)[:200]}
+        self._send(200, "application/json; charset=utf-8",
+                   json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
     def do_POST(self):
-        if self.path.split("?", 1)[0] != "/api/pd":
+        post_path = self.path.split("?", 1)[0]
+        if post_path == "/api/thumbnail":
+            self._handle_thumbnail()
+            return
+        if post_path != "/api/pd":
             self._send(404, "text/plain", b"not found")
             return
         try:
