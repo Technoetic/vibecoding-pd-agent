@@ -29,6 +29,8 @@ def reset():
     orc.cost_total = 0.0
     orc.token_usage = {"prompt": 0, "completion": 0, "total": 0, "calls": 0}
     orc.API_KEY = "test-key"
+    orc._trends_cache.clear()   # 트렌드 공유 캐시 격리(테스트 간 stale 방지)
+    orc.TREND_DEPTH = 1         # 기본은 1콜(광역만)로 테스트 — 다단계는 전용 테스트에서 DEPTH=2 설정
 
 
 def test_token_accumulation():
@@ -442,7 +444,10 @@ def test_fetch_live_trends_parses():
         out = orc.fetch_live_trends("주제")
     finally:
         urllib.request.urlopen = orig
-    assert out["trends"] == [{"keyword": "에이전틱 AI", "why": "부상"}], out
+    # 다단계화 후 trends 항목에 freshness_score가 추가됨 — keyword/why는 보존.
+    assert len(out["trends"]) == 1 and out["trends"][0]["keyword"] == "에이전틱 AI", out
+    assert out["trends"][0]["why"] == "부상", out
+    assert "freshness_score" in out["trends"][0], out
     assert out["sources"] == [{"title": "T", "url": "https://x.com"}], out
     print("PASS test_fetch_live_trends_parses")
 
@@ -1027,6 +1032,167 @@ def test_run_done_has_gamma_field():
     print("PASS test_run_done_has_gamma_field")
 
 
+# ── 트렌드 탐색 심화 (다단계 체인 + 공유 캐시) ─────────────────────
+def _sonar_resp(content):
+    return {"choices": [{"finish_reason": "stop", "message": {
+        "content": content,
+        "metadata": {"search_results": [{"title": "T", "url": "https://a.com"}]},
+    }}], "usage": {"cost": 8.0}}
+
+
+def test_trend_scan_parses():
+    """① 광역 스캔 — Sonar 1콜 파싱."""
+    reset()
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory(_sonar_resp('{"trends":[{"keyword":"n8n","why":"부상"}]}'))
+    try:
+        out = orc._trend_scan("주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert out["trends"] == [{"keyword": "n8n", "why": "부상"}], out
+    assert out["sources"][0]["url"] == "https://a.com", out
+    print("PASS test_trend_scan_parses")
+
+
+def test_trend_deepen_merges_detail():
+    """② 심화 — scan 키워드에 detail 병합(키워드 보존)."""
+    reset()
+    scan = {"trends": [{"keyword": "n8n", "why": "부상"}], "sources": [{"title": "T", "url": "https://a.com"}]}
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen_factory(_sonar_resp(
+        '{"trends":[{"keyword":"n8n","why":"부상","detail":"2026 자동화 구체 사례"}]}'))
+    try:
+        out = orc._trend_deepen("주제", scan)
+    finally:
+        urllib.request.urlopen = orig
+    assert out["trends"][0]["keyword"] == "n8n", out
+    assert out["trends"][0]["detail"] == "2026 자동화 구체 사례", out
+    print("PASS test_trend_deepen_merges_detail")
+
+
+def test_trend_deepen_graceful():
+    """② 심화 Sonar 실패 → scan 그대로(graceful)."""
+    reset()
+    scan = {"trends": [{"keyword": "n8n", "why": "부상"}], "sources": []}
+    def boom(req, timeout=60): raise RuntimeError("down")
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = boom
+    try:
+        out = orc._trend_deepen("주제", scan)
+    finally:
+        urllib.request.urlopen = orig
+    assert out == scan, out
+    print("PASS test_trend_deepen_graceful")
+
+
+def test_trend_deepen_empty_scan_noop():
+    """② scan이 비면 Sonar 호출 없이 그대로 반환(불필요 콜 방지)."""
+    reset()
+    called = {"n": 0}
+    def spy(req, timeout=60):
+        called["n"] += 1
+        return FakeResp(json.dumps(_sonar_resp('{"trends":[]}')).encode("utf-8"))
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = spy
+    try:
+        out = orc._trend_deepen("주제", {"trends": [], "sources": []})
+    finally:
+        urllib.request.urlopen = orig
+    assert called["n"] == 0, f"빈 scan인데 Sonar 호출됨({called['n']})"
+    assert out == {"trends": [], "sources": []}, out
+    print("PASS test_trend_deepen_empty_scan_noop")
+
+
+def test_trend_score_freshness():
+    """③ 교차검증(코드) — 도메인 다양성으로 freshness_score 부여 + '신선도 약함' 감점 + 정렬."""
+    reset()
+    trends = [
+        {"keyword": "약한키워드", "why": "w", "detail": "신선도 약함"},
+        {"keyword": "강한키워드", "why": "w", "detail": "구체 사례"},
+    ]
+    sources = [{"url": "https://a.com/1"}, {"url": "https://b.com/2"}, {"url": "https://www.c.com/3"}]
+    out = orc._trend_score(trends, sources)
+    assert all("freshness_score" in t for t in out), out
+    # 정렬: 강한 키워드(감점 없음)가 약한 키워드(-0.3)보다 앞
+    assert out[0]["keyword"] == "강한키워드", out
+    assert out[0]["freshness_score"] > out[1]["freshness_score"], out
+    print("PASS test_trend_score_freshness")
+
+
+def test_fetch_live_trends_cache_shared():
+    """공유 캐시 — 같은 topic 2회 호출 시 Sonar 1회만(중복 차단)."""
+    reset()
+    calls = {"n": 0}
+    def spy(req, timeout=60):
+        calls["n"] += 1
+        return FakeResp(json.dumps(_sonar_resp('{"trends":[{"keyword":"n8n","why":"부상"}]}')).encode("utf-8"))
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = spy
+    try:
+        r1 = orc.fetch_live_trends("동일주제")
+        n_after_first = calls["n"]
+        r2 = orc.fetch_live_trends("동일주제")   # 캐시 적중 → Sonar 추가 호출 0
+    finally:
+        urllib.request.urlopen = orig
+    assert calls["n"] == n_after_first, f"캐시 미동작 — 2회차도 호출됨({calls['n']})"
+    assert r1 == r2 and r1["trends"], (r1, r2)
+    print("PASS test_fetch_live_trends_cache_shared")
+
+
+def test_fetch_live_trends_depth1_single_call():
+    """DEPTH=1 → 광역만(deepen 건너뜀) = Sonar 1콜."""
+    reset()
+    orc.TREND_DEPTH = 1
+    calls = {"n": 0}
+    def spy(req, timeout=60):
+        calls["n"] += 1
+        return FakeResp(json.dumps(_sonar_resp('{"trends":[{"keyword":"n8n","why":"부상"}]}')).encode("utf-8"))
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = spy
+    try:
+        out = orc.fetch_live_trends("깊이1주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert calls["n"] == 1, f"DEPTH=1인데 {calls['n']}콜(광역만이어야 1)"
+    assert out["trends"][0]["keyword"] == "n8n", out
+    print("PASS test_fetch_live_trends_depth1_single_call")
+
+
+def test_fetch_live_trends_depth2_two_calls():
+    """DEPTH=2 → 광역+심화 = Sonar 2콜."""
+    reset()
+    orc.TREND_DEPTH = 2
+    calls = {"n": 0}
+    def spy(req, timeout=60):
+        calls["n"] += 1
+        return FakeResp(json.dumps(_sonar_resp('{"trends":[{"keyword":"n8n","why":"부상","detail":"사례"}]}')).encode("utf-8"))
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = spy
+    try:
+        out = orc.fetch_live_trends("깊이2주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert calls["n"] == 2, f"DEPTH=2인데 {calls['n']}콜(광역+심화=2여야)"
+    assert out["trends"][0].get("detail") == "사례", out
+    print("PASS test_fetch_live_trends_depth2_two_calls")
+
+
+def test_fetch_live_trends_scan_fail_graceful():
+    """광역 실패 → 빈 결과(캐시 미저장, 다단계 무관)."""
+    reset()
+    orc.TREND_DEPTH = 2
+    def boom(req, timeout=60): raise RuntimeError("down")
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = boom
+    try:
+        out = orc.fetch_live_trends("실패주제")
+    finally:
+        urllib.request.urlopen = orig
+    assert out == {"trends": [], "sources": []}, out
+    assert "실패주제" not in orc._trends_cache, "빈 결과가 캐시됨(재시도 막힘)"
+    print("PASS test_fetch_live_trends_scan_fail_graceful")
+
+
 if __name__ == "__main__":
     test_token_accumulation()
     test_missing_usage_keys_defensive()
@@ -1091,4 +1257,13 @@ if __name__ == "__main__":
     test_gamma_status_completed()
     test_gamma_status_bad_id()
     test_run_done_has_gamma_field()
-    print("\n✅ ALL PASS (53 tests)")
+    test_trend_scan_parses()
+    test_trend_deepen_merges_detail()
+    test_trend_deepen_graceful()
+    test_trend_deepen_empty_scan_noop()
+    test_trend_score_freshness()
+    test_fetch_live_trends_cache_shared()
+    test_fetch_live_trends_depth1_single_call()
+    test_fetch_live_trends_depth2_two_calls()
+    test_fetch_live_trends_scan_fail_graceful()
+    print("\n✅ ALL PASS (62 tests)")

@@ -201,3 +201,13 @@ ADR-019에서 "🔵 사용자 결단(유료 키·인프라)"으로 분류했던 
 - **검증(실측):** ① 회귀 orc 53 + srv 12 = 65 PASS(의존성 0) ② 실 Gamma 키 백엔드 e2e — 생성→폴링(50초)→completed→pdf_url 확보 ③ `/api/gamma` 프록시 curl 3종(완성 id·경로주입 거부·id없음 거부) ④ Playwright 프론트 e2e — 슬라이드 영역 표시·생성중 스피너·폴링·PDF/Gamma 링크·window.open 팝업·JS에러 0, 시각 스크린샷 확인.
 - **비용:** 호출당 크레딧 ~41~71(실측). 승인 즉시 자동이라 매 승인 소모. 잔여 크레딧 status 노출(투명성). **향후 비용 통제 필요 시 env 토글(자동→수동) 여지만 남김(현 범위 밖, YAGNI).**
 - **범위 밖(YAGNI):** from-template 브랜드 템플릿·PPTX export·크레딧 사전 하드게이트.
+
+## ADR-021 — 트렌드 탐색 심화 (다단계 체인, 노드 신설 거부 정합)
+"최신 트렌드 탐색 에이전트 추가" 요청. `/api/suggest` 실측에서 드러난 약점(Sonar 1콜 단발, 출처가 '전망 글' 위주, 신선도 측정 없음)을 정조준. **사용자가 '기존 트렌드 탐색 심화'(독립 5번째 에이전트 신설 X)를 선택** → ADR-010/013 "노드 신설 = 과설계 거부" 철학 정합. brainstorming → 설계(docs/superpowers/specs/2026-06-08-trend-discovery-deepening-design.md) → 구현 → 테스트.
+- **접근법 A(시그니처 유지 내부 다단계):** `fetch_live_trends(topic)` 시그니처·반환 키(`trends`/`sources`) 불변 → 호출처 2곳(`run`·`suggest_topics`)·`agent_trend_analyst`·emit 전부 무변경. 내부만 3단계로: ① `_trend_scan`(광역 Sonar 1콜) ② `_trend_deepen`(심화 Sonar 1콜, detail 보강) ③ `_trend_score`(코드 0콜, freshness_score). **거부:** 별도 `trend_scout` 함수 신설(호출처·테스트·캐시 재배선 과함) / Trend Analyst 페르소나에 검색 위임(검색≠설계 책임분리 파괴).
+- **결정(사용자 확정):** 다단계 체인(광역→심화→교차검증) / 둘 다 적용(run+suggest) / 공유 캐시+env 비용통제.
+- **비용 통제:** 모듈 공유 캐시 `_trends_cache`(TTL `TREND_CACHE_TTL`=1800s) — run·suggest 같은 topic 중복 Sonar 0. `TREND_DEPTH` env(1=현행 1콜 폴백, 2=기본 2콜, 3=교차검증 강화 콜 추가 없이). ADR-006 비용 민감 이력 반영 — DEPTH=1로 즉시 비용 절반 폴백 가능.
+- **graceful 불변식:** 광역 실패→빈 결과(캐시 미저장, 재시도 허용). 심화 실패→광역 유지. 교차검증 순수 코드 무실패. 추가 필드(detail·freshness_score)는 기존 소비자가 무시 → 하위호환.
+- **의존성 0:** Sonar는 기존 `call_text`(urllib). score는 stdlib `urllib.parse`. 신규 패키지 0.
+- **검증(실측):** 회귀 orc 62(트렌드 9건 신규: scan·deepen·graceful·empty-noop·score·캐시공유·depth1·depth2·scan실패) + srv 12 = 74 PASS. 기존 통합 테스트(run) 무손상(DEPTH=1 reset). 프로덕션 다단계 실 e2e는 배포 후 `/api/suggest?refresh=1`로 검증.
+- **범위 밖(YAGNI):** 트렌드 20-knowledge 영속화(배치 잡 영역)·교차검증 전용 3번째 Sonar 콜(DEPTH=3은 프롬프트로 흡수)·ML 신선도 점수(출처 메타 휴리스틱으로 충분).

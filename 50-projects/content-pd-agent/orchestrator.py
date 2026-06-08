@@ -47,6 +47,11 @@ API_KEY = os.environ.get("BIZROUTER_API_KEY", "")
 GAMMA_API_KEY = os.environ.get("GAMMA_API_KEY", "")
 GAMMA_BASE = "https://public-api.gamma.app/v1.0"
 
+# 트렌드 탐색 심화 — 다단계 체인(광역→심화→교차검증). 비용은 DEPTH로 통제(1=현행 1콜).
+TREND_DEPTH = int(os.environ.get("TREND_DEPTH", "2") or "2")          # 1=광역만, 2=+심화, 3=+교차검증강화
+TREND_CACHE_TTL = int(os.environ.get("TREND_CACHE_TTL", "1800") or "1800")  # 30분 공유 TTL(중복 Sonar 차단)
+_trends_cache = {}   # {topic: (monotonic_at, result)} — run·suggest 공유, 같은 topic 반복 호출 절약
+
 cost_total = 0.0  # 누적 비용(원)
 token_usage = {"prompt": 0, "completion": 0, "total": 0, "calls": 0}  # 누적 토큰(BizRouter usage 실측 키)
 
@@ -647,14 +652,11 @@ def _parse_trends(text: str) -> list:
     return out
 
 
-def fetch_live_trends(topic: str) -> dict:
-    """
-    Perplexity Sonar로 실시간 LLM/바이브코딩 트렌드 조사. 출처 포함.
-    반환: {trends:[{keyword,why}], sources:[{title,url}]}.
-    실패/파싱오류 시 {trends:[], sources:[]} (graceful — 기획은 정적 지식·채널주제로 진행).
-    """
-    # Sonar는 '사용자 메시지'가 웹 검색 동력 — 구체적·서술적 쿼리가 검색 품질을 결정(ADR-013).
-    # 검색결과 없으면 추측 금지(그라운딩). 출처는 응답 metadata.search_results에서 추출(산문 링크 요구 금지).
+def _trend_scan(topic: str) -> dict:
+    """① 광역 스캔 — Sonar 1콜. 지금 뜨는 트렌드 키워드 5개 + 출처.
+    Sonar는 '사용자 메시지'가 웹 검색 동력 — 구체적·서술적 쿼리가 검색 품질을 결정(ADR-013).
+    검색결과 없으면 추측 금지(그라운딩). 출처는 metadata.search_results에서 추출.
+    실패 시 {trends:[], sources:[]} (graceful)."""
     today = date.today()
     prompt = (
         f"지금은 {today.year}년 {today.month}월이다. 최근 3개월({today.year}년 기준) 한국의 "
@@ -667,11 +669,103 @@ def fetch_live_trends(topic: str) -> dict:
     )
     try:
         text, sources = call_text(prompt, model=TREND_MODEL)
-        trends = _parse_trends(text)
-        return {"trends": trends, "sources": sources}
+        return {"trends": _parse_trends(text), "sources": sources}
     except Exception as e:
-        print(f"   [trend-live] WARN: Sonar 실패 — {type(e).__name__}: {e}")
+        print(f"   [trend-scan] WARN: Sonar 실패 — {type(e).__name__}: {e}")
         return {"trends": [], "sources": []}
+
+
+def _trend_deepen(topic: str, scan: dict) -> dict:
+    """② 심화 조사 — Sonar 1콜. 광역 키워드를 한 번에 묶어 '구체 사례·왜 지금·신선도'를 깊이 판다.
+    DEPTH=3이면 교차검증(과장·낡음 강등) 지시를 강화한다(콜 추가 없이 프롬프트로).
+    반환: scan을 detail로 보강한 {trends:[{keyword,why,detail}], sources}. Sonar 실패 시 scan 그대로(graceful)."""
+    base = scan.get("trends") or []
+    if not base:
+        return scan
+    today = date.today()
+    kw_lines = "\n".join(f"- {_as_str(t.get('keyword'))}: {_as_str(t.get('why'))}" for t in base[:5])
+    rigor = (
+        "각 키워드가 정말 지금 뜨는지 교차검증하라. 출처가 빈약하거나 과장(낡은 통념·근거 약함)이면 "
+        "detail에 '신선도 약함'이라 명시하라. 단정·과장 금지(표시광고법). "
+        if TREND_DEPTH >= 3 else
+        "각 키워드의 '지금 이게 왜 뜨는지'를 구체 사례로 보강하라. "
+    )
+    prompt = (
+        f"지금은 {today.year}년 {today.month}월이다. 아래는 1차 스캔한 한국 비개발자·바이브코딩·AI 노코드 "
+        f"트렌드 키워드다(콘텐츠 주제 '{topic}' 맥락). 각각을 웹에서 더 깊이 조사해 "
+        f"'구체 사례·왜 지금 뜨는지·최신성'을 한 문장 detail로 더하라.\n"
+        f"{rigor}"
+        f"근거 없으면 지어내지 말고 detail을 빈 문자열로 두라.\n\n"
+        f"=== 1차 스캔 키워드 ===\n{kw_lines}\n\n"
+        f"반드시 순수 JSON만(설명·코드펜스 금지): "
+        '{"trends":[{"keyword":"원래 키워드 그대로","why":"기존 근거","detail":"심화 사례 한 문장"}]}'
+    )
+    try:
+        text, dsources = call_text(prompt, model=TREND_MODEL)
+        deep = _parse_trends(text)
+    except Exception as e:
+        print(f"   [trend-deepen] WARN: Sonar 실패 — scan 유지. {type(e).__name__}: {e}")
+        return scan
+    # 키워드 매칭으로 detail 병합(딥 결과가 키워드를 바꿔도 원본 보존). 매칭 실패분은 원본 유지.
+    detail_by_kw = {_as_str(t.get("keyword")).strip(): _as_str(t.get("detail")).strip()
+                    for t in deep if _as_str(t.get("keyword")).strip()}
+    merged = []
+    for t in base:
+        kw = _as_str(t.get("keyword")).strip()
+        d = dict(t)
+        if detail_by_kw.get(kw):
+            d["detail"] = detail_by_kw[kw]
+        merged.append(d)
+    src = (scan.get("sources") or []) + [s for s in (dsources or []) if s not in (scan.get("sources") or [])]
+    return {"trends": merged, "sources": src}
+
+
+def _trend_score(trends: list, sources: list) -> list:
+    """③ 교차검증(코드, LLM 0콜) — 출처 도메인 다양성으로 freshness_score(0~1) 부여 + 정렬.
+    출처가 여러 독립 도메인에서 뒷받침될수록 신뢰↑. detail '신선도 약함'은 감점.
+    순수 코드라 무실패(결정론)."""
+    import urllib.parse as _up
+    domains = set()
+    for s in (sources or []):
+        try:
+            host = _up.urlparse(_as_str(s.get("url"))).netloc.lower()
+            if host:
+                domains.add(host[4:] if host.startswith("www.") else host)
+        except Exception:
+            pass
+    diversity = min(len(domains), 5) / 5.0   # 독립 도메인 5개 이상이면 만점
+    scored = []
+    for t in (trends or []):
+        if not isinstance(t, dict):
+            continue
+        base = 0.4 + 0.6 * diversity          # 도메인 다양성이 전 트렌드 신뢰 바닥을 올림
+        detail = _as_str(t.get("detail"))
+        if detail and "신선도 약함" in detail:
+            base -= 0.3                        # 심화에서 약하다고 판정된 키워드 감점
+        d = dict(t)
+        d["freshness_score"] = round(max(0.0, min(1.0, base)), 2)
+        scored.append(d)
+    scored.sort(key=lambda x: x.get("freshness_score", 0), reverse=True)
+    return scored
+
+
+def fetch_live_trends(topic: str) -> dict:
+    """실시간 트렌드 다단계 체인(광역→심화→교차검증) + 공유 TTL 캐시.
+    시그니처·반환 키 유지(호출처 무변경): {trends:[{keyword,why,detail?,freshness_score?}], sources:[...]}.
+    DEPTH=1이면 광역만(현행 1콜). 각 단계 graceful 폴백 — 어느 단계 실패해도 이전 결과 반환."""
+    now = time.monotonic()
+    cached = _trends_cache.get(topic)
+    if cached and (now - cached[0]) < TREND_CACHE_TTL and (cached[1].get("trends")):
+        return cached[1]
+    scan = _trend_scan(topic)
+    result = scan
+    if TREND_DEPTH >= 2:
+        result = _trend_deepen(topic, scan)
+    result = {"trends": _trend_score(result.get("trends") or [], result.get("sources") or []),
+              "sources": result.get("sources") or []}
+    if result.get("trends"):          # 성공분만 캐시(빈 결과는 재시도 허용 — suggest 캐시 철학)
+        _trends_cache[topic] = (time.monotonic(), result)
+    return result
 
 
 def suggest_topics(n: int = 6) -> dict:
