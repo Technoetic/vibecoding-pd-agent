@@ -8,7 +8,7 @@ API 키는 서버 환경변수에서만 읽어 브라우저 노출 0.
 주의: 데모는 동시 1요청 직렬 처리. 클라가 중간에 끊겨도 백엔드 기획(유료 LLM)은 완주한다(협조적 중단 미구현 — 데모 단순성).
 실행:  BIZROUTER_API_KEY=... python server.py     (PORT 환경변수 또는 8000)
 """
-import os, re, json, time, queue, threading, traceback
+import os, re, json, time, queue, threading, traceback, hashlib
 from pathlib import Path
 from urllib.parse import unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +27,13 @@ _run_lock = threading.Lock()
 _SUGGEST_TTL = int(os.environ.get("SUGGEST_TTL", 1800))  # 기본 30분
 _suggest_cache = {"at": 0.0, "data": None}
 _suggest_lock = threading.Lock()
+
+# /api/thumbnail prompt 해시 TTL 캐시 — 무인증 공개 엔드포인트의 비용 DoS 완화.
+# 동일 prompt 재호출 시 유료 이미지 생성 0회. {prompt_sha256: (monotonic_at, image)}.
+_THUMB_CACHE_TTL = int(os.environ.get("THUMBNAIL_CACHE_TTL", 3600))  # 기본 1시간
+_THUMB_CACHE_MAX = 64                                                # 메모리 상한(무한증식 차단)
+_thumb_cache = {}
+_thumb_lock = threading.Lock()
 
 
 def get_suggestions(refresh: bool = False) -> dict:
@@ -156,12 +163,26 @@ class Handler(BaseHTTPRequestHandler):
         if not prompt:
             self._send(400, "application/json", b'{"error":"prompt required"}')
             return
+        # prompt 해시 TTL 캐시 — 동일 prompt 반복 호출 시 유료 생성 0회(비용 DoS 완화)
+        key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        now = time.monotonic()
+        with _thumb_lock:
+            hit = _thumb_cache.get(key)
+            if hit and (now - hit[0]) < _THUMB_CACHE_TTL:
+                self._send(200, "application/json; charset=utf-8",
+                           json.dumps({"status": "ok", "image": hit[1], "cached": True}, ensure_ascii=False).encode("utf-8"))
+                return
         try:
             with _run_lock:                          # 모델 호출 — 전역 cost_total 레이스 회피(기존 정책 일관)
                 image = orc.generate_thumbnail(prompt)
             payload = {"status": "ok", "image": image} if image else {"status": "failed"}
         except Exception as e:                        # 어떤 예외도 프론트를 깨지 않게 graceful
             payload = {"status": "failed", "error": str(e)[:200]}
+        if payload.get("status") == "ok" and payload.get("image"):   # 성공분만 캐시(실패는 재시도 허용)
+            with _thumb_lock:
+                if len(_thumb_cache) >= _THUMB_CACHE_MAX:            # 상한 초과 시 단순 비움(무한증식 차단)
+                    _thumb_cache.clear()
+                _thumb_cache[key] = (now, payload["image"])
         self._send(200, "application/json; charset=utf-8",
                    json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
