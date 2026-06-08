@@ -257,6 +257,47 @@ def test_deterministic_block_none():
     print("PASS test_deterministic_block_none")
 
 
+def test_deterministic_block_measured_metrics():
+    """word_count·keyword 미달이 결정론 강제차단되는가 — verdict-checks 모순(LLM이 ❌찍고도
+    approved) 차단의 핵심. e2e에서 60단어가 '승인'되던 가짜승인을 막는다."""
+    ok_orig = {"is_original": True, "max_similarity": 0.1}
+    ok_ch = {"is_distinct": True, "max_jaccard": 0.1, "most_similar_title": ""}
+    ok_d, ok_h = {"hook_ok": True}, {"ok": True}
+    # 단어수 미달 → 차단
+    r = orc.deterministic_block(ok_orig, ok_ch, ok_d, ok_h, {"words": 60, "ok": False}, {"ok": True})
+    assert any("단어 수 위반" in x and "60단어" in x for x in r), r
+    # 키워드 미달 → 차단(missing 노출)
+    r2 = orc.deterministic_block(ok_orig, ok_ch, ok_d, ok_h,
+                                 {"words": 120, "ok": True},
+                                 {"ok": False, "included": 2, "total": 5, "ratio": 0.4, "missing": ["키워드A"]})
+    assert any("키워드 포함률 미달" in x and "키워드A" in x for x in r2), r2
+    # 둘 다 통과 → 차단 없음
+    assert orc.deterministic_block(ok_orig, ok_ch, ok_d, ok_h,
+                                   {"words": 120, "ok": True}, {"ok": True}) == []
+    # wc/kw 미전달(기본 None) → 기존 동작 보존(차단 없음)
+    assert orc.deterministic_block(ok_orig, ok_ch, ok_d, ok_h) == []
+    print("PASS test_deterministic_block_measured_metrics")
+
+
+def test_pick_hook():
+    """훅 결정론 선택: 21음절 이내 후보 우선([0] 무조건 아님). e2e에서 korean_syllable_density가
+    모든 escalated에 등장한 주범 — [0]이 길어도 짧은 [1]을 고르게 해 5/5 승인 달성한 수정."""
+    # [0]이 길고 [1]이 짧으면 [1] 선택(한계 내 가장 정보량 많은 것)
+    long0 = "이것은 분명히 스물한 음절을 넉넉히 넘기는 아주 긴 훅 문장이다 정말로"
+    short1 = "AI로 웹사이트 5분 완성?"
+    picked = orc.pick_hook([long0, short1, "짧다?"])
+    assert orc.korean_syllables(picked) <= 21, (picked, orc.korean_syllables(picked))
+    # 한계 내에서 가장 정보량(음절) 많은 것 — short1(13) > '짧다?'(2)
+    assert picked == short1, picked
+    # 전부 초과 → 가장 짧은 것
+    allover = ["가나다라마바사아자차카타파하가나다라마바사", "가나다라마바사아자차카타파하가나다라마바사아자차"]
+    assert orc.pick_hook(allover) == allover[0], "전부 초과면 가장 짧은 것"
+    # 빈/None 안전
+    assert orc.pick_hook([]) == ""
+    assert orc.pick_hook(None) == ""
+    print("PASS test_pick_hook")
+
+
 def test_call_text_returns_content_and_sources():
     """call_text: json_object 없이 본문 + metadata.search_results 반환."""
     reset()
@@ -601,8 +642,9 @@ def test_run_happy_path_integration():
         {"choices":[{"finish_reason":"stop","message":{"content":'{"trends":[{"keyword":"테스트트렌드","why":"근거"}]}',"metadata":{"search_results":[{"title":"T","url":"https://x.com"}]}}}],"usage":{"cost":0.1}},
         # 2) trend-analyst (call, json_object)
         {"choices":[{"finish_reason":"stop","message":{"content":'{"keywords":["통합테스트키워드"],"hooks":["3초 훅"]}'}}],"usage":{"cost":0.05}},
-        # 3) creator
-        {"choices":[{"finish_reason":"stop","message":{"content":'{"title":"통합테스트 고유제목 절대중복없음 zzqq","script":"'+("단어 "*120)+'","storyboard":["s"],"thumbnail_prompt":"t","hashtags":["#태그"]}'}}],"usage":{"cost":0.05}},
+        # 3) creator — script에 타겟 키워드('통합테스트키워드')를 포함해야 결정론 keyword_inclusion 통과.
+        #    (패치: deterministic_block이 word_count·keyword를 강제차단하므로 mock도 이를 만족해야 함)
+        {"choices":[{"finish_reason":"stop","message":{"content":'{"title":"통합테스트 고유제목 절대중복없음 zzqq","script":"통합테스트키워드 '+("단어 "*120)+'","storyboard":["s"],"thumbnail_prompt":"t","hashtags":["#태그"]}'}}],"usage":{"cost":0.05}},
         # 4) reviewer → approved
         {"choices":[{"finish_reason":"stop","message":{"content":'{"verdict":"approved","checks":[{"metric":"length_bounds","pass":true,"comment":"ok"}],"feedback":[]}'}}],"usage":{"cost":0.05}},
     ]
@@ -829,6 +871,8 @@ if __name__ == "__main__":
     test_load_channel_titles_corrupt_graceful()
     test_deterministic_block_both()
     test_deterministic_block_none()
+    test_deterministic_block_measured_metrics()
+    test_pick_hook()
     test_call_text_returns_content_and_sources()
     test_call_text_no_metadata()
     test_call_text_length_truncation_raises()

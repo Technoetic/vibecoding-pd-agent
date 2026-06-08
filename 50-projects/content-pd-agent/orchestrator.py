@@ -336,6 +336,19 @@ def korean_syllables(text: str) -> int:
     return len(re.findall(r"[가-힣]", text or ""))
 
 
+def pick_hook(hooks: "list | None", limit: int = 21) -> str:
+    """채택 훅을 결정론으로 선택. Trend Analyst가 1~3개 훅을 내면 무조건 [0]을 쓰던 탓에
+    [0]이 21음절 초과면 [1]이 짧아도 반려됐다(e2e: korean_syllable_density가 모든 escalated에 등장).
+    21음절 이내 훅이 하나라도 있으면 그중 가장 긴 것(정보량↑), 전부 초과면 가장 짧은 것을 고른다."""
+    cands = [h for h in (hooks or []) if isinstance(h, str) and h.strip()]
+    if not cands:
+        return ""
+    fits = [h for h in cands if korean_syllables(h) <= limit]
+    if fits:
+        return max(fits, key=korean_syllables)        # 한계 내에서 가장 정보량 많은 훅
+    return min(cands, key=korean_syllables)            # 전부 초과 → 그나마 가장 짧은 것
+
+
 def script_density_score(hook: str, full_script: str) -> dict:
     """
     한국어 음절 밀도 결정론 측정.
@@ -560,13 +573,16 @@ def suggest_topics(n: int = 6) -> dict:
     return {"topics": topics[:n], "trends": live.get("trends", []), "sources": live.get("sources", [])}
 
 
-def deterministic_block(orig: dict, channel: dict, density: dict, htag: dict) -> list:
+def deterministic_block(orig: dict, channel: dict, density: dict, htag: dict,
+                        wc: "dict | None" = None, kw: "dict | None" = None) -> list:
     """
-    결정론 검사(originality·channel_dup·hook음절·해시태그) 위반 사유를 모두 모아 반환.
-    위반이 여럿이면 모두 반환 — 한 회차에 모든 사유를 Creator에 통보(retry 낭비 방지).
+    결정론 검사 위반 사유를 모두 모아 반환. 위반이 여럿이면 모두 반환(retry 낭비 방지).
     빈 리스트면 결정론 차단 없음.
-    맥락무관 하드위반(hook≤21음절, 해시태그 1~5개)만 강제반려 — 본문 density 상한은
-    맥락의존이라 Reviewer soft 판정으로 둔다(여기 추가하지 않음).
+
+    측정 가능한 메트릭은 LLM verdict 변덕에 맡기지 않고 코드가 강제한다 — e2e에서 LLM이
+    checks에 ❌(length/keyword 미달)를 찍고도 최상위 verdict를 approved로 내 Eval이 무력화되는
+    모순을 관측했다(verdict-checks 불일치). word_count·keyword_inclusion을 여기서 강제차단해
+    "측정으로 떨어지는데 운으로 승인"을 차단한다. density 본문 상한만 Reviewer soft로 둔다(맥락의존).
     """
     reasons = []
     if not orig["is_original"]:
@@ -585,6 +601,16 @@ def deterministic_block(orig: dict, channel: dict, density: dict, htag: dict) ->
     if not htag["ok"]:
         reasons.append(
             f"해시태그 개수 위반: {htag['count']}개(1~5개 최적). 니치 태그 중심으로 조정."
+        )
+    if wc is not None and not wc["ok"]:
+        reasons.append(
+            f"본문 단어 수 위반: {wc['words']}단어(100~250 범위). "
+            f"{'구체 사례·단계로 100단어 이상 확장' if wc['words'] < 100 else '250단어 이하로 축약'}. (결정론 측정)"
+        )
+    if kw is not None and not kw["ok"]:
+        reasons.append(
+            f"키워드 포함률 미달: {kw['included']}/{kw['total']}({kw['ratio']}, 임계 0.8). "
+            f"누락 키워드 {kw.get('missing', [])}를 본문에 자연스럽게 삽입. (결정론 측정)"
         )
     return reasons
 
@@ -622,7 +648,8 @@ def agent_trend_analyst(topic: str, kb: str, channel_topics: list, live_trends: 
         "\n\n## 출력 형식 (JSON만)\n"
         '{"keywords": ["1~2어절 짧은 핵심 명사구 5개 내외(조사·서술어 없이, 본문에 자연스럽게 박히게). '
         "예: '노코드 창업', 'AI 웹서비스'. '개발 없이 웹서비스를 만드는 법' 같은 완성문장 금지\"], "
-        '"hooks": ["3초 훅 1~3개"]}'
+        '"hooks": ["3초 훅 3개 — 각 한글 18음절 이내로 짧게(받침·이중모음도 1음절). '
+        '3초에 다 읽혀야 한다. 최소 1개는 반드시 18음절 이내로. 예: AI로 웹사이트 5분 완성?(13음절)"]}'
     )
     ch = "\n".join(f"- {t}" for t in channel_topics) or "(없음)"
     tr = "\n".join(f"- {x.get('keyword','')}: {x.get('why','')}" for x in live_trends) or "(없음)"
@@ -635,21 +662,33 @@ def agent_trend_analyst(topic: str, kb: str, channel_topics: list, live_trends: 
     return call(sys_p, user, temperature=0.8, max_tokens=600)
 
 
-def agent_creator(topic: str, keywords, hooks, feedback, kb: str) -> dict:
+def agent_creator(topic: str, keywords, hooks, feedback, kb: str, temperature: float = 0.8) -> dict:
+    # Creator가 Reviewer와 같은 잣대로 쓰게 — 검수 기준을 선주입(비대칭 제거). e2e 실측상
+    # length_bounds·korean_syllable_density 미달이 매 회차 반려의 주범이었다(Creator가 임계를 몰라서).
     sys_p = load_persona("creator") + (
-        "\n\n## 출력 형식 (JSON만)\n"
-        '{"title": "제목", "script": "쇼츠 스크립트 100~250단어", '
+        "\n\n## 검수 통과 필수 기준 — 처음부터 전부 동시 충족하라(하나라도 위반 시 즉시 반려)\n"
+        "- 본문(script) 단어 수: 공백 분리 기준 ★120단어 이상★ 250단어 이하를 목표로 써라. "
+        "100단어 미만은 자동 반려된다. 여유 있게 120단어를 넘기도록 구체 사례·단계·수치·근거를 채워라 "
+        "(95~99단어로 아슬아슬하게 멈추지 말 것 — 실측상 모델이 자주 미달한다).\n"
+        "- 해시태그: 1~5개(5개 초과 금지). #fyp·#viral 등 광범위 태그 금지, 본문과 일치하는 니치 태그만.\n"
+        "- 수익/효과 단정 금지: '무조건·보장·누구나·쌉가능' 등 단정 대신 가능성·사례한정. 결과는 사람마다 다름.\n"
+        "- 완주율 설계: 첫 3초 훅 → 핵심가치 초반 투척(결론 숨기지 말 것) → 본문 정보 사다리 → 마지막 명확 CTA.\n"
+        "- 훅 차별화: '5분 만에'류 시간/수치 포화 앵글이면 비개발자 호명(정체성형)·반전 앵글을 우선.\n"
+        "\n## 출력 형식 (JSON만)\n"
+        '{"title": "제목", "script": "쇼츠 스크립트 100~250단어(반드시 100단어 이상)", '
         '"storyboard": ["장면 단위 텍스트"], "thumbnail_prompt": "이미지 생성 프롬프트", '
-        '"hashtags": ["#태그"]}'
+        '"hashtags": ["#니치태그 1~5개"]}'
     )
     fb = ""
     if feedback:
-        fb = "\n\n=== 직전 반려 피드백(이것만 고쳐라) ===\n" + "\n".join(f"- {x}" for x in feedback)
+        # 직전 1회가 아니라 누적 제약 전체 — A 고치다 B 깨는 두더지잡기 차단(e2e 확인).
+        fb = ("\n\n=== 지금까지 누적된 모든 수정요구(아래를 전부 동시 충족하되, 명시 안 된 통과 부분은 보존) ===\n"
+              + "\n".join(f"- {x}" for x in feedback))
     user = (
         f"주제: {topic}\n타겟 키워드: {keywords}\n채택 훅: {hooks}{fb}\n\n"
         f"=== 톤앤매너 근거(20-knowledge) ===\n{kb}"
     )
-    return call(sys_p, user, temperature=0.8, max_tokens=1400)
+    return call(sys_p, user, temperature=temperature, max_tokens=1400)
 
 
 def agent_reviewer(payload: dict, eval_spec: dict, orig: dict, channel: dict) -> dict:
@@ -803,7 +842,9 @@ def run(topic: str, on_step=None):
     while True:
         print(f"[Creator] 스크립트 작성 중… (retry={task['retry_count']})")
         emit("creator", retry=task["retry_count"])
-        cre = agent_creator(topic, keywords, hooks, feedback, kb)
+        # 첫 회차는 창의(0.8), retry부터 감온(0.3) — 통과한 부분을 흔들지 않게 안정화(e2e 두더지잡기 차단).
+        _cre_temp = 0.8 if task["retry_count"] == 0 else 0.3
+        cre = agent_creator(topic, keywords, hooks, feedback, kb, temperature=_cre_temp)
         # LLM 필드 타입 정규화(list 기대 필드에 str/null 와도 메트릭·enumerate 깨짐 방지)
         cre["storyboard"] = _as_list(cre.get("storyboard"))
         cre["hashtags"] = _as_list(cre.get("hashtags"))
@@ -833,7 +874,8 @@ def run(topic: str, on_step=None):
               f"(임계 0.6, distinct={channel['is_distinct']}, ~ {channel['most_similar_title'][:30]})")
 
         # korean_syllable_density·hashtag_count: 결정론 실측(LLM 추측 대체)
-        hook0 = (task["content_payload"].get("hooks") or [""])[0]
+        # 훅은 [0] 무조건이 아니라 21음절 이내 후보를 결정론 선택(e2e: 음절초과가 escalated 주범).
+        hook0 = pick_hook(task["content_payload"].get("hooks") or [])
         density = script_density_score(hook0, task["content_payload"].get("script", ""))
         htag = hashtag_count_score(task["content_payload"].get("hashtags", []))
         task["content_payload"]["density"] = density
@@ -867,8 +909,9 @@ def run(topic: str, on_step=None):
             print(f"   {mark} {ch.get('metric')}: {ch.get('comment','')}")
             emit("reviewer", metric=ch.get("metric"), passed=ch.get("pass"), comment=ch.get("comment", ""))
 
-        # 결정론 강제 차단: originality·channel 위반 사유를 한 번에 모아 반려(retry 낭비 방지)
-        block_reasons = deterministic_block(orig, channel, density, htag)
+        # 결정론 강제 차단: 측정 가능한 위반(orig·channel·hook음절·해시태그·단어수·키워드)을 한 번에
+        # 모아 반려. LLM verdict 변덕과 무관하게 코드가 강제(verdict-checks 모순 차단).
+        block_reasons = deterministic_block(orig, channel, density, htag, wc, kw)
         rev["feedback"] = _as_list(rev.get("feedback"))  # LLM이 str/null 줘도 list 보장(extend·append 안전)
         if block_reasons and verdict == "approved":
             verdict = "rejected"
@@ -893,14 +936,16 @@ def run(topic: str, on_step=None):
                  token_usage=dict(token_usage), eval=_as_list(rev.get("checks")))
             return
 
-        # rejected
-        feedback = rev["feedback"]  # 위에서 _as_list로 정규화됨
-        task["feedback_log"].append({"retry": task["retry_count"], "feedback": feedback})
+        # rejected — 이번 회차 사유를 기록하고, Creator엔 '누적' 제약을 넘긴다.
+        # 직전 1회만 넘기면 A 고치다 통과했던 B를 깨는 두더지잡기로 3회 소진→에스컬레이션(e2e 확인).
+        this_round = rev["feedback"]  # 위에서 _as_list로 정규화됨
+        task["feedback_log"].append({"retry": task["retry_count"], "feedback": this_round})
+        feedback = sorted(set(map(str, feedback)) | set(map(str, this_round)))  # 누적 합집합(중복 제거)
         task["retry_count"] += 1
         task["status"] = "rejected"
         write_state(state)
-        print(f"   ↩ 반려: {feedback}")
-        emit("rejected", retry=task["retry_count"], feedback=feedback)
+        print(f"   ↩ 반려(누적 {len(feedback)}건): {this_round}")
+        emit("rejected", retry=task["retry_count"], feedback=this_round)
 
         if task["retry_count"] > max_retries:
             task["token_usage"] = dict(token_usage)
