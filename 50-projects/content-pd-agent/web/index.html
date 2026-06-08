@@ -84,6 +84,16 @@
   .esc-notice .retrybtn { margin-top:10px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
   .esc-notice ul { margin:6px 0 0; padding-left:18px; color:var(--mut); }
   .script { white-space:pre-wrap; background:#0d1117; border-radius:8px; padding:14px; font-size:14px; }
+  #result h3 { font-size:15px; margin:18px 0 8px; color:var(--fg); }
+  .hooklist { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .hooklist .hk { background:#0d1117; border:1px solid var(--bd); border-left:3px solid var(--ac); border-radius:6px; padding:8px 12px; font-size:14px; }
+  .story { margin:0; padding-left:0; list-style:none; counter-reset:sc; }
+  .story li { counter-increment:sc; background:#0d1117; border-radius:8px; padding:10px 12px 10px 40px; margin-bottom:6px; font-size:14px; position:relative; }
+  .story li::before { content:counter(sc); position:absolute; left:10px; top:10px; width:20px; height:20px; background:var(--ac); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
+  .thumb { background:#0d1117; border:1px dashed var(--bd); border-radius:8px; padding:12px; font-size:13px; color:var(--mut); font-family:ui-monospace,Menlo,Consolas,monospace; line-height:1.6; white-space:pre-wrap; }
+  .metatable td { padding:6px 8px; font-size:13px; }
+  .metatable td:first-child { color:var(--mut); width:42%; }
+  .metatable .ok { color:var(--ok); } .metatable .no { color:var(--no); }
   .muted { color:var(--mut); font-size:13px; }
   .hidden { display:none; }
   .arch { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -129,8 +139,31 @@
     <h2 id="rTitle"></h2>
     <p><span class="badge" id="rBadge">승인대기</span> <span class="muted" id="rCost"></span></p>
     <div id="escNotice" class="esc-notice hidden"></div>
+
+    <div id="rKwHook" class="hidden">
+      <h3>🎯 타겟 키워드 · 3초 훅</h3>
+      <div id="rKeywords" class="chips"></div>
+      <div id="rHooks" class="hooklist"></div>
+    </div>
+
     <h3 id="rScriptHead">🎬 스크립트</h3><div class="script" id="rScript"></div>
+
+    <div id="rStoryWrap" class="hidden">
+      <h3>🖼 스토리보드</h3>
+      <ol id="rStory" class="story"></ol>
+    </div>
+
+    <div id="rThumbWrap" class="hidden">
+      <h3>🎨 썸네일 프롬프트</h3>
+      <div id="rThumb" class="thumb"></div>
+    </div>
+
     <h3>🏷 해시태그</h3><div class="muted" id="rTags"></div>
+
+    <div id="rMetaWrap" class="hidden">
+      <h3>📋 기획 메타 (실측)</h3>
+      <table class="metatable"><tbody id="rMeta"></tbody></table>
+    </div>
   </div>
 
   <div class="card hidden" id="evalPanel">
@@ -290,6 +323,42 @@ const METRIC_KO = {
   factual_accuracy:"사실 정확성",
 };
 
+// 풍부한 기획서 섹션(키워드·훅·스토리보드·썸네일·실측 메타) 렌더
+function renderRichSections(p){
+  const arr = v => Array.isArray(v) ? v : (v ? [v] : []);
+  // 키워드 + 훅
+  const kws = arr(p.keywords), hks = arr(p.hooks);
+  if(kws.length || hks.length){
+    $("#rKwHook").classList.remove("hidden");
+    $("#rKeywords").innerHTML = kws.map(k=>`<span class="chip" style="cursor:default">${esc(k)}</span>`).join("");
+    $("#rHooks").innerHTML = hks.map(h=>`<div class="hk">💡 ${esc(h)}</div>`).join("");
+  } else $("#rKwHook").classList.add("hidden");
+  // 스토리보드
+  const sb = arr(p.storyboard);
+  if(sb.length){ $("#rStoryWrap").classList.remove("hidden"); $("#rStory").innerHTML = sb.map(s=>`<li>${esc(s)}</li>`).join(""); }
+  else $("#rStoryWrap").classList.add("hidden");
+  // 썸네일 프롬프트
+  if(p.thumbnail_prompt){ $("#rThumbWrap").classList.remove("hidden"); $("#rThumb").textContent = p.thumbnail_prompt; }
+  else $("#rThumbWrap").classList.add("hidden");
+  // 실측 메타(결정론 측정값) — 있는 것만
+  const rows = [];
+  const pct = x => (typeof x==="number" ? x.toFixed(2) : x);
+  if(p.originality) rows.push(["독창성(최대 유사도)", `${pct(p.originality.max_similarity)} (임계 0.85)`, p.originality.is_original]);
+  if(p.channel_dup) rows.push(["채널 영상 중복(자카드)", `${pct(p.channel_dup.max_jaccard)} (임계 0.6)`, p.channel_dup.is_distinct]);
+  if(p.density){ rows.push(["3초 훅 음절", `${p.density.hook_syllables}음절 (≤21)`, p.density.hook_ok]);
+                 rows.push(["본문 음절 수", `${p.density.script_syllables}음절`, null]); }
+  if(p.word_count) rows.push(["스크립트 단어 수", `${p.word_count.words}단어`, p.word_count.ok]);
+  if(p.keyword_check) rows.push(["키워드 포함", `${p.keyword_check.included}/${p.keyword_check.total}`, p.keyword_check.ok]);
+  if(p.hashtag_check) rows.push(["해시태그 개수", `${p.hashtag_check.count}개 (1~5)`, p.hashtag_check.ok]);
+  if(rows.length){
+    $("#rMetaWrap").classList.remove("hidden");
+    $("#rMeta").innerHTML = rows.map(([k,v,ok])=>{
+      const mark = ok===true ? '<span class="ok">✓</span>' : ok===false ? '<span class="no">✕</span>' : '';
+      return `<tr><td>${esc(k)}</td><td>${esc(v)} ${mark}</td></tr>`;
+    }).join("");
+  } else $("#rMetaWrap").classList.add("hidden");
+}
+
 function renderResult(kind, d){
   const p = d.payload || {};
   $("#result").classList.remove("hidden");
@@ -297,6 +366,7 @@ function renderResult(kind, d){
   $("#rScript").textContent = p.script || "";
   $("#rTags").textContent = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : (p.hashtags || "");
   $("#rCost").textContent = `비용 ${d.cost_krw}원 · 토큰 ${(d.token_usage||{}).total||0} · ${kind==="escalated"?"검수 미달(반려)":"승인"}`;
+  renderRichSections(p);   // 스토리보드·썸네일·키워드·훅·실측 메타 전체 노출
 
   const badge = $("#rBadge"), notice = $("#escNotice");
   if(kind==="escalated"){
@@ -323,6 +393,8 @@ function renderResult(kind, d){
 async function renderFallbackSamples(){   // error 폴백. server.py /api/samples hashtags=문자열 → join 안 함
   const s = await getSamples();
   if(!s.length) return;
+  ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap","#escNotice"].forEach(x=>$(x).classList.add("hidden"));  // 샘플엔 풍부 섹션 없음
+  $("#rBadge").textContent = "샘플"; $("#rBadge").className = "badge"; $("#rScriptHead").textContent = "🎬 스크립트";
   $("#result").classList.remove("hidden");
   $("#rTitle").textContent = "[샘플] " + (s[0].title||"");
   $("#rScript").textContent = s[0].script || "";
@@ -454,6 +526,7 @@ async function run(topic){
   renderSteps();
   $("#evalTable tbody").innerHTML = ""; $("#evalCount").textContent = "";
   $("#escNotice").classList.add("hidden"); $("#escNotice").innerHTML = "";  // 이전 에스컬레이션 안내 정리
+  ["#rKwHook","#rStoryWrap","#rThumbWrap","#rMetaWrap"].forEach(s=>$(s).classList.add("hidden"));  // 이전 기획서 섹션 정리
   banner("");
   $(".pbar").classList.remove("stopped");
   $("#pbarFill").className = "";          // is-* 제거
