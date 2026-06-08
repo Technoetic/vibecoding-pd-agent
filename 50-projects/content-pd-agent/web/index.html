@@ -83,7 +83,9 @@
   .esc-notice .fmlist { color:var(--fg); }
   .esc-notice .retrybtn { margin-top:10px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
   .esc-notice ul { margin:6px 0 0; padding-left:18px; color:var(--mut); }
-  .script { white-space:pre-wrap; background:#0d1117; border-radius:8px; padding:14px; font-size:14px; }
+  .script { white-space:pre-wrap; background:#0d1117; border-radius:8px; padding:16px; font-size:14px; line-height:1.9; }
+  .script b { color:var(--fg); font-weight:700; }
+  .script mark { background:#1f6feb33; color:var(--ac); border-radius:4px; padding:1px 5px; font-weight:600; }
   #result h3 { font-size:15px; margin:18px 0 8px; color:var(--fg); }
   .hooklist { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
   .hooklist .hk { background:#0d1117; border:1px solid var(--bd); border-left:3px solid var(--ac); border-radius:6px; padding:8px 12px; font-size:14px; }
@@ -224,6 +226,21 @@ function newRun(){
 }
 
 const esc = t => { const e=document.createElement("div"); e.textContent = (t==null?"":t); return e.innerHTML; };
+
+// 스크립트 가독성: 문장 단위 줄바꿈 + 결정론 하이라이트(수치·CTA). XSS 안전 — esc 먼저, 우리 태그만 주입.
+function renderScript(raw){
+  let s = esc(raw || "");                       // ★ 1) HTML escape 먼저(주입 차단)
+  // 2) 문장 분리: 종결부호(. ? !) 뒤 공백 → 줄바꿈. 단 소수점(3.5)·연속부호는 보존.
+  s = s.replace(/([.?!])\s+(?=[^\s])/g, (m, p1, off, str) => {
+    const prev = str[off-1] || "";              // 숫자.숫자(소수점) 분리 방지
+    if(p1 === "." && /\d/.test(prev) && /\d/.test(str[off+m.length]||"")) return m;
+    return p1 + "\n";
+  });
+  // 3) 하이라이트(escape된 텍스트 위 — 안전): 수치 <b>, CTA <mark>
+  s = s.replace(/(\d[\d,]*\s*(?:개|분|초|시간|일|주|개월|년|원|만원|배|%|달러|MRR))/g, '<b>$1</b>');
+  s = s.replace(/(좋아요|구독|댓글에?\s*[^\s<]{0,8}|다음\s*영상|링크는?\s*[^\s<]{0,8}|고정\s*댓글)/g, '<mark>$1</mark>');
+  return s;
+}
 function fmt(x){ return (typeof x==="number") ? x.toFixed(2) : (x==null ? "-" : String(x)); }
 
 // ── 타이머: 경과시간 텍스트만 갱신(진행바 width 절대 안 건드림) ──
@@ -376,7 +393,7 @@ function renderResult(kind, d){
   const p = d.payload || {};
   $("#result").classList.remove("hidden");
   $("#rTitle").textContent = d.title || p.title || "";
-  $("#rScript").textContent = p.script || "";
+  $("#rScript").innerHTML = renderScript(p.script || "");   // 문장 줄바꿈 + 하이라이트(XSS 안전)
   $("#rTags").textContent = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : (p.hashtags || "");
   $("#rCost").textContent = `비용 ${d.cost_krw}원 · 토큰 ${(d.token_usage||{}).total||0} · ${kind==="escalated"?"검수 미달(반려)":"승인"}`;
   renderRichSections(p);   // 스토리보드·썸네일·키워드·훅·실측 메타 전체 노출
@@ -460,7 +477,7 @@ async function renderFallbackSamples(){   // error 폴백. server.py /api/sample
   $("#rBadge").textContent = "샘플"; $("#rBadge").className = "badge"; $("#rScriptHead").textContent = "🎬 스크립트";
   $("#result").classList.remove("hidden");
   $("#rTitle").textContent = "[샘플] " + (s[0].title||"");
-  $("#rScript").textContent = s[0].script || "";
+  $("#rScript").innerHTML = renderScript(s[0].script || "");
   $("#rTags").textContent = s[0].hashtags || "";
   $("#rCost").textContent = `사전 생성 샘플 ${s.length}건 · API 키 없거나 오류 시 폴백`;
 }
