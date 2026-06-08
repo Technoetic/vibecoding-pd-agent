@@ -363,15 +363,42 @@ def word_count_score(script: str, min_w: int = 100, max_w: int = 250) -> dict:
     return {"words": n, "ok": min_w <= n <= max_w}
 
 
+def _keyword_present(keyword: str, script: str, tok_ratio: float = 0.7, window: int = 20) -> bool:
+    """키워드 토큰의 근접 부분일치. 한국어 조사·어순 변형은 인정하되,
+    흩어진 우연 매칭·공통토큰 스터핑은 차단(결정론 엄정성 보존).
+    - 단일 토큰: substring 존재로 충분(기존 엄정성 유지)
+    - 복합 토큰: 자기 토큰 70%가 좁은 윈도우 안에 군집해야 통과(근접 요구)."""
+    toks = [t for t in re.split(r"\s+", (keyword or "").strip()) if t]
+    if not toks:
+        return False
+    if len(toks) == 1:
+        return toks[0] in script
+    need = max(1, round(len(toks) * tok_ratio))
+    pos = {t: [m.start() for m in re.finditer(re.escape(t), script)] for t in toks}
+    present = [t for t in toks if pos[t]]
+    if len(present) < need:
+        return False
+    span = window * len(toks)                 # 토큰들이 좁은 범위에 군집해야 통과(흩어짐 차단)
+    starts = sorted({p for t in present for p in pos[t]})
+    for s0 in starts:
+        cnt = sum(1 for t in present if any(s0 <= p <= s0 + span for p in pos[t]))
+        if cnt >= need:
+            return True
+    return False
+
+
 def keyword_inclusion_score(script: str, keywords: list, min_ratio: float = 0.8) -> dict:
-    """타겟 키워드 본문 포함률 결정론 측정."""
-    kws = keywords or []
+    """타겟 키워드 본문 포함률 결정론 측정(근접 토큰 부분일치 — 조사/어순 변형 허용,
+    흩어진 우연·스터핑 차단). exact-substring은 한국어 굴절을 0점 처리해 반복 반려를 유발했다(ADR)."""
+    kws = [k for k in (keywords or []) if k]
     if not kws:
-        return {"ratio": 0.0, "included": 0, "total": 0, "ok": False}
+        return {"ratio": 0.0, "included": 0, "total": 0, "ok": False, "missing": [], "matched": []}
     s = script or ""
-    inc = sum(1 for k in kws if k and k in s)
-    ratio = inc / len(kws)
-    return {"ratio": round(ratio, 3), "included": inc, "total": len(kws), "ok": ratio >= min_ratio}
+    matched = [k for k in kws if _keyword_present(k, s)]
+    mset = set(matched)
+    ratio = len(matched) / len(kws)
+    return {"ratio": round(ratio, 3), "included": len(matched), "total": len(kws),
+            "ok": ratio >= min_ratio, "matched": matched, "missing": [k for k in kws if k not in mset]}
 
 
 # ── 팩트체크: 과장·거짓 단정 패턴(결정론) ──
@@ -583,7 +610,9 @@ def next_task_id(state: dict) -> str:
 def agent_trend_analyst(topic: str, kb: str, channel_topics: list, live_trends: list) -> dict:
     sys_p = load_persona("trend-analyst") + (
         "\n\n## 출력 형식 (JSON만)\n"
-        '{"keywords": ["키워드 5개 내외"], "hooks": ["3초 훅 1~3개"]}'
+        '{"keywords": ["1~2어절 짧은 핵심 명사구 5개 내외(조사·서술어 없이, 본문에 자연스럽게 박히게). '
+        "예: '노코드 창업', 'AI 웹서비스'. '개발 없이 웹서비스를 만드는 법' 같은 완성문장 금지\"], "
+        '"hooks": ["3초 훅 1~3개"]}'
     )
     ch = "\n".join(f"- {t}" for t in channel_topics) or "(없음)"
     tr = "\n".join(f"- {x.get('keyword','')}: {x.get('why','')}" for x in live_trends) or "(없음)"

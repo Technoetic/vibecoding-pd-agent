@@ -767,10 +767,32 @@ def test_word_count_score():
 
 
 def test_keyword_inclusion_score():
+    # (기존) 부분 포함 + missing 반환 — 회귀 보호
     s = "AI 코딩 입문 가이드와 노코드 창업 이야기"
     r = orc.keyword_inclusion_score(s, ["AI 코딩", "노코드 창업", "없는키워드"])
-    assert r["included"] == 2 and r["total"] == 3, r
-    assert r["ok"] is False  # 2/3 = 0.667 < 0.8
+    assert r["included"] == 2 and r["total"] == 3 and r["ok"] is False, r  # 2/3=0.667<0.8
+    assert "없는키워드" in r["missing"], r            # missing 리스트(Creator 피드백 경로)
+
+    # (신규 A) 자연 변형 인정: 한국어 조사·어순 굴절은 통과해야 한다 — 반복반려 근인 수정의 핵심
+    # exact-substring(현행)이면 0.0으로 실패 → 근접 토큰 매칭이면 통과
+    s2 = "엑셀을 대체하는 AI로 데이터 분석 속도가 확 빨라집니다. AI로 엑셀 작업을 대체하세요."
+    r2 = orc.keyword_inclusion_score(s2, ["엑셀 대체 AI", "데이터 분석 속도"])
+    assert r2["ok"] is True, r2
+
+    # (신규 B) 가짜 통과 차단①: 흩어진 우연 토큰은 탈락(근접 윈도우 방어)
+    far = "엑셀은 오래된 도구다. " + ("잡담 " * 60) + "AI는 미래다. " + ("딴말 " * 60) + "대체 가능성도 있다."
+    rf = orc.keyword_inclusion_score(far, ["엑셀 대체 AI", "데이터 분석 속도", "실무 꿀팁", "자동화 비결", "노코드 창업"])
+    assert rf["ok"] is False, rf
+
+    # (신규 C) 가짜 통과 차단②: 완전 오프토픽은 0.0
+    cook = "오늘은 김치찌개를 끓입니다. 돼지고기와 두부를 넣고 푹 끓이면 맛있어요."
+    rc = orc.keyword_inclusion_score(cook, ["엑셀 대체 AI", "데이터 분석 속도"])
+    assert rc["ok"] is False and rc["ratio"] == 0.0, rc
+
+    # (신규 D) 스터핑 차단: 공통 토큰(AI)만 반복해도 각 키워드 고유토큰 70% 필요
+    stuff = "AI AI AI AI AI 정말 좋은 AI AI"
+    rs = orc.keyword_inclusion_score(stuff, ["엑셀 대체 AI", "데이터 분석 AI"])
+    assert rs["ok"] is False, rs
     print("PASS test_keyword_inclusion_score")
 
 
