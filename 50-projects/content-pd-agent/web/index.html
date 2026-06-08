@@ -83,9 +83,14 @@
   .esc-notice .fmlist { color:var(--fg); }
   .esc-notice .retrybtn { margin-top:10px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
   .esc-notice ul { margin:6px 0 0; padding-left:18px; color:var(--mut); }
-  .script { white-space:pre-wrap; background:#0d1117; border-radius:8px; padding:16px; font-size:14px; line-height:1.9; }
+  .script { background:#0d1117; border-radius:8px; padding:16px; font-size:14px; line-height:1.7; }
   .script b { color:var(--fg); font-weight:700; }
   .script mark { background:#1f6feb33; color:var(--ac); border-radius:4px; padding:1px 5px; font-weight:600; }
+  /* 스크립트 구조 라벨링: 훅(상단 강조)·본문·CTA(하단 강조) */
+  .script .sc-hook { font-size:15px; font-weight:600; color:var(--fg); border-left:3px solid var(--ac); padding:2px 0 2px 12px; margin-bottom:10px; }
+  .script .sc-body { color:var(--fg); padding:2px 0 2px 12px; margin-bottom:6px; border-left:3px solid transparent; }
+  .script .sc-cta { border-left:3px solid var(--ac); background:#1f6feb14; border-radius:0 6px 6px 0; padding:6px 0 6px 12px; margin-top:10px; }
+  .script .sc-lbl { display:inline-block; font-size:10px; font-weight:700; letter-spacing:.5px; color:var(--ac); background:#1f6feb22; border-radius:4px; padding:1px 6px; margin-right:8px; vertical-align:1px; }
   #result h3 { font-size:15px; margin:18px 0 8px; color:var(--fg); }
   .hooklist { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
   .hooklist .hk { background:#0d1117; border:1px solid var(--bd); border-left:3px solid var(--ac); border-radius:6px; padding:8px 12px; font-size:14px; }
@@ -227,19 +232,51 @@ function newRun(){
 
 const esc = t => { const e=document.createElement("div"); e.textContent = (t==null?"":t); return e.innerHTML; };
 
-// 스크립트 가독성: 문장 단위 줄바꿈 + 결정론 하이라이트(수치·CTA). XSS 안전 — esc 먼저, 우리 태그만 주입.
-function renderScript(raw){
-  let s = esc(raw || "");                       // ★ 1) HTML escape 먼저(주입 차단)
-  // 2) 문장 분리: 종결부호(. ? !) 뒤 공백 → 줄바꿈. 단 소수점(3.5)·연속부호는 보존.
-  s = s.replace(/([.?!])\s+(?=[^\s])/g, (m, p1, off, str) => {
-    const prev = str[off-1] || "";              // 숫자.숫자(소수점) 분리 방지
-    if(p1 === "." && /\d/.test(prev) && /\d/.test(str[off+m.length]||"")) return m;
-    return p1 + "\n";
-  });
-  // 3) 하이라이트(escape된 텍스트 위 — 안전): 수치 <b>, CTA <mark>
-  s = s.replace(/(\d[\d,]*\s*(?:개|분|초|시간|일|주|개월|년|원|만원|배|%|달러|MRR))/g, '<b>$1</b>');
-  s = s.replace(/(좋아요|구독|댓글에?\s*[^\s<]{0,8}|다음\s*영상|링크는?\s*[^\s<]{0,8}|고정\s*댓글)/g, '<mark>$1</mark>');
+// 스크립트 가독성: 문장 분리 → 훅/본문/CTA 구조 라벨링(위치 기반) + 결정론 하이라이트.
+// XSS 안전: esc 먼저, escape된 텍스트 위에만 우리 태그 주입.
+function _hlScript(line){
+  let s = line;
+  // 수치 <b>: '월 300만 원'·'5일'·'80%'. '만 원'(공백 허용), 조사·이상은 안 먹음.
+  s = s.replace(/(\d[\d,]*\s*(?:만\s*원|개|분|초|시간|일|주|개월|년|원|배|%|달러|MRR))/g, '<b>$1</b>');
+  // 핵심 개념어 <b>: 콘텐츠 PD가 검토할 키워드
+  s = s.replace(/(MVP|최소\s*기능\s*제품|프로토타입|문제\s*정의|자동화|수익화)/g, '<b>$1</b>');
+  // CTA <mark>: 단어만(조사 제외). 이미 <b>로 감싼 안쪽은 건드리지 않게 단어경계 위주.
+  s = s.replace(/(좋아요|구독|댓글|링크|고정\s*댓글|다음\s*영상|확인하세요)/g, '<mark>$1</mark>');
   return s;
+}
+// 해시태그 전용 줄 판정(이모지·공백 제외 후 #토큰만 남으면 true). CTA 배지 오부착 방지.
+function _isHashtagOnly(line){
+  const stripped = line.replace(/[#][^\s#]+/g,"").replace(/[\s\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{1F900}-\u{1F9FF}]/gu,"").trim();
+  return /#/.test(line) && stripped==="";
+}
+function renderScript(raw){
+  const s = esc(raw || "");                      // ★ 1) HTML escape 먼저
+  // 2) 문장 분리(종결부호 뒤 공백). 소수점(3.5) 보존.
+  const parts = [];
+  let buf = "";
+  for(let i=0;i<s.length;i++){
+    buf += s[i];
+    if(/[.?!]/.test(s[i])){
+      const prev=s[i-1]||"", next=s[i+1]||"", next2=s[i+2]||"";
+      const isDecimal = s[i]==="." && /\d/.test(prev) && /\d/.test(next);
+      if(!isDecimal && (/\s/.test(next) || next==="")){
+        parts.push(buf.trim()); buf="";
+        while(/\s/.test(s[i+1])) i++;            // 공백 스킵
+      }
+    }
+  }
+  if(buf.trim()) parts.push(buf.trim());
+  const lines = parts.filter(x=>x);
+  if(!lines.length) return "";
+  // 3) 위치 기반 구조 라벨링: 첫=훅, CTA=마지막(단 해시태그 전용 줄이면 그 앞), 나머지=본문
+  let ctaIdx = lines.length-1;
+  if(lines.length>1 && _isHashtagOnly(lines[ctaIdx])) ctaIdx = lines.length-2;
+  return lines.map((ln,i)=>{
+    const hl = _hlScript(ln);
+    if(i===0) return `<div class="sc-hook">${hl}</div>`;
+    if(i===ctaIdx) return `<div class="sc-cta"><span class="sc-lbl">CTA</span>${hl}</div>`;
+    return `<div class="sc-body">${hl}</div>`;
+  }).join("");
 }
 function fmt(x){ return (typeof x==="number") ? x.toFixed(2) : (x==null ? "-" : String(x)); }
 
