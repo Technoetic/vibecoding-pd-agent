@@ -95,7 +95,6 @@
   .gamma .gspin { display:inline-block; width:14px; height:14px; border:2px solid var(--bd); border-top-color:var(--ac); border-radius:50%; animation:gspin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
   @keyframes gspin { to { transform:rotate(360deg); } }
   .gamma a.glink { display:inline-block; margin:4px 10px 4px 0; background:var(--ac); color:#fff; text-decoration:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; }
-  .gamma a.glink.sec { background:transparent; color:var(--ac); border:1px solid var(--ac); }
   .gamma .gfail { color:var(--no); }
   .gamma .gmut { color:var(--mut); font-size:12px; margin-top:6px; }
   .gamma .retrybtn { margin-top:8px; background:var(--ac); color:#fff; border:0; border-radius:8px; padding:7px 13px; font-size:13px; font-weight:600; cursor:pointer; }
@@ -427,12 +426,9 @@ function renderGamma(g){
 }
 function gammaCompleted(d){
   const box = $("#rGamma");
-  const pdf = d.pdf_url || "", gamma = d.gamma_url || "";
-  const rem = (d.credits && (d.credits.remaining!=null)) ? `<div class="gmut">잔여 크레딧 ${d.credits.remaining}</div>` : "";
+  const pdf = d.pdf_url || "";
   box.innerHTML =
-    (pdf ? `<a class="glink" href="${esc(pdf)}" target="_blank" rel="noopener">📥 PDF 열기</a>` : "") +
-    (gamma ? `<a class="glink sec" href="${esc(gamma)}" target="_blank" rel="noopener">🔗 Gamma에서 편집</a>` : "") +
-    rem;
+    (pdf ? `<a class="glink" href="${esc(pdf)}" target="_blank" rel="noopener">📥 PDF 열기</a>` : "");
   if(pdf && !_gammaOpened){ _gammaOpened = true; window.open(pdf, "_blank", "noopener"); }  // 새 탭 1회
 }
 function gammaFail(msg, retryId){
